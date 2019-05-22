@@ -21,6 +21,8 @@ GetOptions(
 	't=i' => \(my $taxonAbbreviationLength = 4),
 	'f=i' => \(my $fontSize = 15),
 	'w=i' => \(my $tdWidth = 60),
+	'S' => \(my $disableClusteringSample = ''),
+	'G' => \(my $disableClusteringGene = ''),
 );
 if($help || scalar(@ARGV) == 0) {
 	die <<EOF;
@@ -34,6 +36,8 @@ Options: -h       display this help message
          -t INT   taxon abbreviation length [$taxonAbbreviationLength]
          -f INT   HTML font size [$fontSize]
          -w INT   HTML table cell width [$tdWidth]
+         -S       disable clustering sample
+         -G       disable clustering gene
 
 EOF
 }
@@ -115,10 +119,14 @@ if(@geneList) {
 	foreach my $geneIndex (0 .. $#geneList) {
 		$R->set(sprintf('colnames(x)[%d]', $geneIndex + 1), $geneList[$geneIndex]);
 	}
-	$R->run('hc.sample <- hclust(as.dist(1 - cor(t(x), method = "spearman")))');
-	@sampleList = @{$R->get('hc.sample$labels[hc.sample$order]')};
-	$R->run('hc.gene <- hclust(as.dist(1 - cor(x, method = "spearman")))');
-	@geneList = @{$R->get('hc.gene$labels[hc.gene$order]')};
+	if($disableClusteringSample eq '') {
+		$R->run('hc.sample <- hclust(as.dist(1 - cor(t(x), method = "spearman")))');
+		@sampleList = @{$R->get('hc.sample$labels[hc.sample$order]')};
+	}
+	if($disableClusteringGene eq '') {
+		$R->run('hc.gene <- hclust(as.dist(1 - cor(x, method = "spearman")))');
+		@geneList = @{$R->get('hc.gene$labels[hc.gene$order]')};
+	}
 	$R->stop();
 }
 
