@@ -55,6 +55,7 @@ if(not -r "$dataPath/nodes.dmp" or not -r "$dataPath/names.dmp") {
 }
 my $db = Bio::DB::Taxonomy->new(-source => 'flatfile', -directory => $dataPath, -nodesfile => "$dataPath/nodes.dmp", -namesfile => "$dataPath/names.dmp");
 
+my @sampleList = ();
 my %sampleGeneAbundanceHash = ();
 my %sampleGeneTaxonAbundanceHash = ();
 my %geneDefinitionHash = ();
@@ -62,6 +63,7 @@ my %geneDefinitionHash = ();
 foreach(@sampleFileList) {
 	my ($sample, $file) = @$_;
 	if(-s $file) {
+		push(@sampleList, $sample);
 		open(my $reader, $file);
 		chomp(my $line = <$reader>);
 		my @columnList = split(/\t/, $line, -1);
@@ -78,27 +80,26 @@ foreach(@sampleFileList) {
 		close($reader);
 	}
 }
-my @sampleList = sort keys %sampleGeneAbundanceHash;
-my @geneList = ();
-{
-	my %geneHash = ();
-	foreach my $sample (@sampleList) {
-		$geneHash{$_} = 1 foreach(keys %{$sampleGeneAbundanceHash{$sample}});
-	}
-	@geneList = sort keys %geneHash;
+my %geneHash = ();
+foreach my $sample (@sampleList) {
+	$geneHash{$_} = 1 foreach(keys %{$sampleGeneAbundanceHash{$sample}});
 }
+my @geneList = ();
 if(@geneFileList) {
-	my %geneHash = ();
 	foreach my $geneFile (@geneFileList) {
+		@geneList = ();
 		open(my $reader, $geneFile);
 		while(my $line = <$reader>) {
 			chomp($line);
 			my ($gene) = split(/\t/, $line);
-			$geneHash{$gene} = 1;
+			push(@geneList, $gene) if($geneHash{$gene});
 		}
 		close($reader);
+		%geneHash = ();
+		$geneHash{$_} = 1 foreach(@geneList);
 	}
-	@geneList = grep {$geneHash{$_}} @geneList;
+} else {
+	@geneList = sort keys %geneHash;
 }
 
 if(@geneList) {
