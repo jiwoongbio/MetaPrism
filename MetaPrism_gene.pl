@@ -102,7 +102,7 @@ if($geneDefinitionFile ne '') {
 	open(my $reader, $geneDefinitionFile);
 	while(my $line = <$reader>) {
 		chomp($line);
-		my ($gene, $definition) = split(/\t/, $line);
+		my ($gene, $definition) = split(/\t/, $line, -1);
 		$geneDefinitionHash{$gene} = $definition;
 	}
 	close($reader);
@@ -114,7 +114,7 @@ if($proteinGeneFile ne '') {
 	open(my $reader, $proteinGeneFile);
 	while(my $line = <$reader>) {
 		chomp($line);
-		my ($protein, $gene, $cutoff) = split(/\t/, $line);
+		my ($protein, $gene, $cutoff) = split(/\t/, $line, -1);
 		$proteinGeneHash{$protein} = $gene;
 		$proteinCutoffHash{$protein} = $cutoff;
 	}
@@ -267,7 +267,7 @@ if($genomeNotPrepared) { # ORF translation mapping
 		open(my $reader, "$databasePrefix.length.txt");
 		while(my $line = <$reader>) {
 			chomp($line);
-			my ($protein, $sequenceLength) = split(/\t/, $line);
+			my ($protein, $sequenceLength) = split(/\t/, $line, -1);
 			$proteinSequenceLengthHash{$protein} = $sequenceLength;
 		}
 		close($reader);
@@ -278,7 +278,7 @@ if($genomeNotPrepared) { # ORF translation mapping
 		while(my $line = <$reader>) {
 			chomp($line);
 			my %tokenHash = ();
-			@tokenHash{qw(qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore)} = split(/\t/, $line);
+			@tokenHash{qw(qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore)} = split(/\t/, $line, -1);
 			next if(defined($_ = $proteinCutoffHash{$tokenHash{'sseqid'}}) && $tokenHash{'pident'} < $_);
 			$tokenHash{'coverage'} = (($tokenHash{'pident'} / 100) * $tokenHash{'length'}) / $proteinSequenceLengthHash{$tokenHash{'sseqid'}};
 			print $writer join("\t", $line, $tokenHash{'coverage'}), "\n" if($tokenHash{'coverage'} >= $minimumCoverage && $tokenHash{'qstart'} <= $tokenHash{'qend'} && $tokenHash{'sstart'} <= $tokenHash{'send'});
@@ -302,7 +302,7 @@ if($genomeNotPrepared) { # ORF translation mapping
 		while(my $line = <$reader>) {
 			chomp($line);
 			my %tokenHash = ();
-			@tokenHash{qw(qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore), 'coverage'} = split(/\t/, $line);
+			@tokenHash{qw(qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore), 'coverage'} = split(/\t/, $line, -1);
 			%topTokenHash = %tokenHash if($tokenHash{'qseqid'} ne $topTokenHash{'qseqid'});
 			if(scalar(grep {$tokenHash{$_} != $topTokenHash{$_}} 'evalue', 'bitscore', 'coverage') == 0) {
 				(@tokenHash{'contig', 'start', 'end', 'strand'}, my @startList) = split(/\|/, $tokenHash{'qseqid'});
@@ -314,6 +314,7 @@ if($genomeNotPrepared) { # ORF translation mapping
 				$tokenHash{'gene'} = getGene($tokenHash{'sseqid'});
 				next if($tokenHash{'gene'} eq 'off-target');
 				$tokenHash{'definition'} = $geneDefinitionHash{$tokenHash{'gene'}};
+				$tokenHash{'definition'} = '' unless(defined($tokenHash{'definition'}));
 				print $writer join("\t", @tokenHash{@columnList}), "\n";
 				$contigHash{$tokenHash{'contig'}} = 1;
 			}
@@ -348,7 +349,7 @@ if(@bamFileList) { # Abundance estimation
 				while(my $line = <$reader>) {
 					chomp($line);
 					my %tokenHash = ();
-					@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line);
+					@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line, -1);
 					my @positionList = getPositionList(@tokenHash{'pos', 'cigar'});
 					if(@positionList = grep {defined} @positionList) {
 						$contigMeanDepthHash{$contig} += scalar(@positionList);
@@ -374,11 +375,11 @@ if(@bamFileList) { # Abundance estimation
 		my @tokenHashList = ();
 		open(my $reader, "$genomePrefix.region.txt");
 		chomp(my $line = <$reader>);
-		my @columnList = split(/\t/, $line);
+		my @columnList = split(/\t/, $line, -1);
 		while(my $line = <$reader>) {
 			chomp($line);
 			my %tokenHash = ();
-			@tokenHash{@columnList} = split(/\t/, $line);
+			@tokenHash{@columnList} = split(/\t/, $line, -1);
 			next unless($tokenHash{'contig'} =~ /^$contigPrefix/);
 			foreach my $bamFile (@bamFileList) {
 				my ($baseCount, @readList) = getBaseCountReadList($bamFile, @tokenHash{'contig', 'start', 'end', 'strand'});
@@ -460,7 +461,7 @@ sub getBaseCountReadList {
 	while(my $line = <$reader>) {
 		chomp($line);
 		my %tokenHash = ();
-		@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line);
+		@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line, -1);
 		next if($stranded ne '' && getReadStrand($tokenHash{'flag'}) ne $strand);
 		my @positionList = getPositionList(@tokenHash{'pos', 'cigar'});
 		if(@positionList = grep {$start <= $_ && $_ <= $end} grep {defined} @positionList) {

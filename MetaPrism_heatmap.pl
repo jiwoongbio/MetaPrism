@@ -12,18 +12,19 @@ use Bio::DB::Taxonomy;
 my $dataPath = "$codePath/MetaPrism_data";
 system("mkdir -p $dataPath");
 
-my @geneFileList = ();
 GetOptions(
 	'h' => \(my $help = ''),
 	'A=s' => \(my $abundanceColumn = 'meanDepth/genome'),
 	'R=s' => \(my $taxonRank = 'genus'),
-	'g=s' => \@geneFileList,
+	'F=s' => \(my $featureType = 'gene_taxon'),
+	's' => \(my $scale = ''),
+	'f=s' => \(my $featureFile = ''),
 	't=i' => \(my $taxonAbbreviationLength = 4),
 	'f=i' => \(my $fontSize = 15),
 	'w=i' => \(my $tdWidth = 60),
-	'S' => \(my $disableClusteringSample = ''),
-	'G' => \(my $disableClusteringGene = ''),
 );
+my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'taxon', 'taxon_average');
+my $featureTypes = join(', ', map {"\"$_\""} @featureTypeList);
 if($help || scalar(@ARGV) == 0) {
 	die <<EOF;
 
@@ -32,15 +33,16 @@ Usage:   perl MetaPrism_heatmap.pl [options] [sample=]abundance.txt [...] > heat
 Options: -h       display this help message
          -A STR   abundance column [$abundanceColumn]
          -R STR   taxon rank [$taxonRank]
-         -g FILE  gene file
+         -F STR   feature type, $featureTypes [$featureType]
+         -s       scale
+         -f FILE  feature file
          -t INT   taxon abbreviation length [$taxonAbbreviationLength]
          -f INT   HTML font size [$fontSize]
          -w INT   HTML table cell width [$tdWidth]
-         -S       disable clustering sample
-         -G       disable clustering gene
 
 EOF
 }
+die "ERROR in $0: The feature type is not available.\n" if(scalar(grep {$featureType eq $_} @featureTypeList) == 0);
 
 my (@sampleFileList) = @ARGV;
 
@@ -56,7 +58,8 @@ if(not -r "$dataPath/nodes.dmp" or not -r "$dataPath/names.dmp") {
 my $db = Bio::DB::Taxonomy->new(-source => 'flatfile', -directory => $dataPath, -nodesfile => "$dataPath/nodes.dmp", -namesfile => "$dataPath/names.dmp");
 
 my @sampleList = ();
-my %sampleGeneAbundanceHash = ();
+my %sampleFeatureAbundanceHash = ();
+my %sampleFeatureCountHash = ();
 my %sampleGeneTaxonAbundanceHash = ();
 my %geneDefinitionHash = ();
 @sampleFileList = map {[$_->[0], $_->[-1]]} map {[split(/=/, $_, 2)]} @sampleFileList;
@@ -71,67 +74,76 @@ foreach(@sampleFileList) {
 			chomp($line);
 			my %tokenHash = ();
 			@tokenHash{@columnList} = split(/\t/, $line, -1);
-			$sampleGeneAbundanceHash{$sample}->{$tokenHash{'gene'}} += $tokenHash{$abundanceColumn};
-			if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
-				$sampleGeneTaxonAbundanceHash{$sample}->{$tokenHash{'gene'}}->{$taxonName} += $tokenHash{$abundanceColumn};
+			my $feature = '';
+			if($featureType eq 'gene_taxon') {
+				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
+					$feature = join("\t", $tokenHash{'gene'}, $taxonName);
+				}
+			} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
+				$feature = $tokenHash{'gene'};
+				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
+					$sampleGeneTaxonAbundanceHash{$sample}->{$feature}->{$taxonName} += $tokenHash{$abundanceColumn};
+				}
+			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
+				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
+					$feature = $taxonName;
+				}
+			}
+			if($feature ne '') {
+				$sampleFeatureAbundanceHash{$sample}->{$feature} += $tokenHash{$abundanceColumn};
+				$sampleFeatureCountHash{$sample}->{$feature} += 1;
 			}
 			$geneDefinitionHash{$tokenHash{'gene'}} = $tokenHash{'definition'} if(defined($tokenHash{'definition'}) && $tokenHash{'definition'} ne '');
 		}
 		close($reader);
 	}
 }
-my %geneHash = ();
-foreach my $sample (@sampleList) {
-	$geneHash{$_} = 1 foreach(keys %{$sampleGeneAbundanceHash{$sample}});
-}
-my @geneList = ();
-if(@geneFileList) {
-	foreach my $geneFile (@geneFileList) {
-		@geneList = ();
-		open(my $reader, $geneFile);
-		while(my $line = <$reader>) {
-			chomp($line);
-			my ($gene) = split(/\t/, $line);
-			push(@geneList, $gene) if($geneHash{$gene});
-		}
-		close($reader);
-		%geneHash = ();
-		$geneHash{$_} = 1 foreach(@geneList);
+if($featureType eq 'gene_average' || $featureType eq 'taxon_average') {
+	foreach my $sample (@sampleList) {
+		$sampleFeatureAbundanceHash{$sample}->{$_} /= $sampleFeatureCountHash{$sample}->{$_} foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
 	}
-} else {
-	@geneList = sort keys %geneHash;
 }
+my %featureHash = ();
+foreach my $sample (@sampleList) {
+	$featureHash{$_} = 1 foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
+}
+my @featureList = ();
+if($featureFile ne '') {
+	open(my $reader, );
+	while(my $line = <$reader>) {
+		chomp($line);
+		my @tokenList = split(/\t/, $line, -1);
+		my $feature = $featureType eq 'gene_taxon' ? join("\t", @tokenList[0, 1]) : $tokenList[0];
+		push(@featureList, $feature) if($featureHash{$feature});
+	}
+	close($reader);
+} else {
+	@featureList = sort keys %featureHash;
 
-if(@geneList) {
 	my $R = Statistics::R->new();
 	$R->run('x <- data.frame()');
-	foreach my $geneIndex (0 .. $#geneList) {
+	foreach my $featureIndex (0 .. $#featureList) {
 		foreach my $sampleIndex (0 .. $#sampleList) {
-			if(defined(my $abundance = $sampleGeneAbundanceHash{$sampleList[$sampleIndex]}->{$geneList[$geneIndex]})) {
-				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $geneIndex + 1), $abundance);
+			if(defined(my $abundance = $sampleFeatureAbundanceHash{$sampleList[$sampleIndex]}->{$featureList[$featureIndex]})) {
+				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), $abundance);
 			} else {
-				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $geneIndex + 1), 0);
+				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), 0);
 			}
 		}
 	}
 	foreach my $sampleIndex (0 .. $#sampleList) {
 		$R->set(sprintf('rownames(x)[%d]', $sampleIndex + 1), $sampleList[$sampleIndex]);
 	}
-	foreach my $geneIndex (0 .. $#geneList) {
-		$R->set(sprintf('colnames(x)[%d]', $geneIndex + 1), $geneList[$geneIndex]);
+	foreach my $featureIndex (0 .. $#featureList) {
+		$R->set(sprintf('colnames(x)[%d]', $featureIndex + 1), $featureList[$featureIndex]);
 	}
-	if($disableClusteringSample eq '') {
-		$R->run('hc.sample <- hclust(as.dist(1 - cor(t(x), method = "spearman")))');
-		@sampleList = @{$R->get('hc.sample$labels[hc.sample$order]')};
-	}
-	if($disableClusteringGene eq '') {
-		$R->run('hc.gene <- hclust(as.dist(1 - cor(x, method = "spearman")))');
-		@geneList = @{$R->get('hc.gene$labels[hc.gene$order]')};
-	}
+	$R->run('hc <- hclust(as.dist(1 - cor(x, method = "spearman")))');
+	@featureList = @{$R->get('hc$labels[hc$order]')};
 	$R->stop();
 }
 
-print <<EOF;
+if(@featureList) {
+	print <<EOF;
 <!DOCTYPE html>
 <html>
 <head>
@@ -168,61 +180,114 @@ table.heatmap td:hover div.popup {
 <form method="post">
 EOF
 
-print "<table><tr>\n";
-print "<td><table class=\"heatmap\">\n";
-{
-	my @tdList = ("<td></td>");
-	foreach my $sample (@sampleList) {
-		push(@tdList, "<td style=\"text-align: center; width: ${tdWidth}px;\">$sample</td>");
+	print "<table><tr>\n";
+	print "<td><table class=\"heatmap\">\n";
+	{
+		my @tdList = ();
+		if($featureType eq 'gene_taxon') {
+			push(@tdList, map {"<td>$_</td>"} 'gene', 'taxon');
+		} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
+			push(@tdList, map {"<td>$_</td>"} 'gene');
+		} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
+			push(@tdList, map {"<td>$_</td>"} 'taxon');
+		}
+		foreach my $sample (@sampleList) {
+			push(@tdList, "<td style=\"text-align: center; width: ${tdWidth}px;\">$sample</td>");
+		}
+		print join('', "<tr>", @tdList, "</tr>"), "\n";
 	}
-	print join('', "<tr>", @tdList, "</tr>"), "\n";
-}
-foreach my $gene (@geneList) {
-	my @tdList = ();
-	if(defined(my $definition = $geneDefinitionHash{$gene})) {
-		push(@tdList, "<td>$gene<div class=\"popup\">$definition</div></td>");
+	my $maximumScale = 0;
+	if($scale) {
+		foreach my $feature (@featureList) {
+			my @abundanceList = map {defined($_) ? $_ : 0} map {$_->{$feature}} @sampleFeatureAbundanceHash{@sampleList};
+			foreach(map {abs($_)} scale(@abundanceList)) {
+				$maximumScale = $_ if($_ > $maximumScale);
+			}
+		}
+		$maximumScale = int(int($maximumScale) == $maximumScale ? $maximumScale : $maximumScale + 1);
+	}
+	foreach my $feature (@featureList) {
+		my @tdList = ();
+		if($featureType eq 'gene_taxon') {
+			my ($gene, $taxon) = split(/\t/, $feature);
+			if(defined(my $definition = $geneDefinitionHash{$gene})) {
+				$gene = "$gene<div class=\"popup\">$definition</div>";
+			}
+			push(@tdList, map {"<td>$_</td>"} $gene, $taxon);
+		} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
+			my $gene = $feature;
+			if(defined(my $definition = $geneDefinitionHash{$gene})) {
+				$gene = "$gene<div class=\"popup\">$definition</div>";
+			}
+			push(@tdList, map {"<td>$_</td>"} $gene);
+		} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
+			my $taxon = $feature;
+			push(@tdList, map {"<td>$_</td>"} $taxon);
+		}
+		my @abundanceList = map {defined($_) ? $_ : 0} map {$_->{$feature}} @sampleFeatureAbundanceHash{@sampleList};
+		my @colorList = ();
+		if($scale) {
+			@colorList = map {$_ > 0 ? color(1, ($maximumScale - $_) / $maximumScale, 0) : color(($maximumScale - abs($_)) / $maximumScale, 1, 0)} scale(@abundanceList);
+		} else {
+			@colorList = map {$_ > 1 ? color(1, 1 / $_, 0) : color($_, 1, 0)} @abundanceList;
+		}
+		foreach my $sampleIndex (0 .. $#sampleList) {
+			my ($sample, $abundance, $color) = ($sampleList[$sampleIndex], $abundanceList[$sampleIndex], $colorList[$sampleIndex]);
+			if(defined($_ = $sampleGeneTaxonAbundanceHash{$sample}->{$feature})) {
+				my %taxonAbundanceHash = %$_;
+				my @taxonAbundanceList = sort {$b->[1] <=> $a->[1] || $b->[0] cmp $a->[0]} map {[$_, $taxonAbundanceHash{$_}]} keys %taxonAbundanceHash;
+				my $taxonAbundances = join('<br>', map {sprintf('%s %.3f', @$_)} @taxonAbundanceList);
+				my @taxonFontSizeList = map {[substr($_->[0], 0, $taxonAbbreviationLength), $fontSize * ($_->[1] / $abundance)]} @taxonAbundanceList;
+				my $taxons = join('', map {sprintf('<div style="font-size: %fpx; line-height: %fpx;">%s</div>', $_->[1], $_->[1], $_->[0])} @taxonFontSizeList);
+				push(@tdList, "<td style=\"text-align: center; background-color: $color;\">$taxons<div class=\"popup\">$taxonAbundances</div></td>");
+			} else {
+				push(@tdList, "<td style=\"text-align: center; background-color: $color;\"></td>");
+			}
+		}
+		print join('', "<tr>", @tdList, "</tr>"), "\n";
+	}
+	print "</table></td>\n";
+	print "<td><table class=\"heatmap\">\n";
+	if($scale) {
+		foreach(map {$maximumScale * (5 - $_) / 5} 0 .. 4) {
+			my $color = color(1, ($maximumScale - $_) / $maximumScale, 0);
+			print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$_</td></tr>\n";
+		}
+		foreach(map {$maximumScale * (0 - $_) / 5} 0 .. 5) {
+			my $color = color(($maximumScale - abs($_)) / $maximumScale, 1, 0);
+			print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$_</td></tr>\n";
+		}
 	} else {
-		push(@tdList, "<td>$gene</td>");
-	}
-	foreach my $sample (@sampleList) {
-		my $abundance = defined($_ = $sampleGeneAbundanceHash{$sample}->{$gene}) ? $_ : 0;
-		my $color = '#FFFFFF';
-		if($abundance > 1) {
-			$color = color(1, 1 / $abundance, 0);
-		} else {
-			$color = color($abundance, 1, 0);
+		foreach(map {10 - $_ * 2} 0 .. 4) {
+			my $color = color(1, 1 / $_, 0);
+			print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$_</td></tr>\n";
 		}
-		if(defined($_ = $sampleGeneTaxonAbundanceHash{$sample}->{$gene})) {
-			my %taxonAbundanceHash = %$_;
-			my @taxonAbundanceList = sort {$b->[1] <=> $a->[1] || $b->[0] cmp $a->[0]} map {[$_, $taxonAbundanceHash{$_}]} keys %taxonAbundanceHash;
-			my $taxonAbundances = join('<br>', map {sprintf('%s %.3f', @$_)} @taxonAbundanceList);
-			my @taxonFontSizeList = map {[substr($_->[0], 0, $taxonAbbreviationLength), $fontSize * ($_->[1] / $abundance)]} @taxonAbundanceList;
-			my $taxons = join('', map {sprintf('<div style="font-size: %fpx; line-height: %fpx;">%s</div>', $_->[1], $_->[1], $_->[0])} @taxonFontSizeList);
-			push(@tdList, "<td style=\"text-align: center; background-color: $color;\">$taxons<div class=\"popup\">$taxonAbundances</div></td>");
-		} else {
-			push(@tdList, "<td style=\"text-align: center; background-color: $color;\"></td>");
+		foreach(map {(5 - $_) / 5} 0 .. 5) {
+			my $color = color($_, 1, 0);
+			print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$_</td></tr>\n";
 		}
 	}
-	print join('', "<tr>", @tdList, "</tr>"), "\n";
-}
-print "</table></td>\n";
-print "<td><table class=\"heatmap\">\n";
-for(my $depth = 10; $depth > 0; $depth -= 2) {
-	my $color = color(1, 1 / $depth, 0);
-	print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$depth</td></tr>\n";
-}
-for(my $depth = 1; $depth >= 0; $depth = sprintf('%.1f', $depth - 0.2)) {
-	my $color = color($depth, 1, 0);
-	print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$depth</td></tr>\n";
-}
-print "</table></td>\n";
-print "</tr></table>\n";
+	print "</table></td>\n";
+	print "</tr></table>\n";
 
-print <<EOF;
+	print <<EOF;
 </form>
 </body>
 </html>
 EOF
+}
+
+sub scale {
+	my @valueList = @_;
+	my $mean = 0;
+	$mean += $_ foreach(@valueList);
+	$mean /= scalar(@valueList);
+	my $sd = 0;
+	$sd += ($_ - $mean) ** 2 foreach(@valueList);
+	$sd /= scalar(@valueList) - 1;
+	$sd = $sd ** 0.5;
+	return map {($_ - $mean) / $sd} @valueList;
+}
 
 sub color {
 	my ($red, $green, $blue) = @_;

@@ -94,6 +94,17 @@ Options: -h       display this help message
          -s INT   seed [1]
 ```
 
+* MetaPrism_table.pl
+```
+Usage:   perl MetaPrism_table.pl [options] [sample=]abundance.txt [...] > table.txt
+
+Options: -h       display this help message
+         -A STR   abundance column [meanDepth/genome]
+         -R STR   taxon rank [genus]
+         -F STR   feature type, "gene_taxon", "gene", "gene_average", "taxon", "taxon_average" [gene_taxon]
+         -s       scale
+```
+
 * MetaPrism_heatmap.pl
 ```
 Usage:   perl MetaPrism_heatmap.pl [options] [sample=]abundance.txt [...] > heatmap.html
@@ -101,7 +112,9 @@ Usage:   perl MetaPrism_heatmap.pl [options] [sample=]abundance.txt [...] > heat
 Options: -h       display this help message
          -A STR   abundance column [meanDepth/genome]
          -R STR   taxon rank [genus]
-         -g FILE  gene file
+         -F STR   feature type, "gene_taxon", "gene", "gene_average", "taxon", "taxon_average" [gene_taxon]
+         -s       scale
+         -f FILE  feature file
          -t INT   taxon abbreviation length [4]
          -f INT   HTML font size [15]
          -w INT   HTML table cell width [60]
