@@ -204,7 +204,7 @@ EOF
 				$maximumScale = $_ if($_ > $maximumScale);
 			}
 		}
-		$maximumScale = int(int($maximumScale) == $maximumScale ? $maximumScale : $maximumScale + 1);
+		$maximumScale = int($maximumScale) == $maximumScale ? $maximumScale : int($maximumScale + 1);
 	}
 	foreach my $feature (@featureList) {
 		my @tdList = ();
