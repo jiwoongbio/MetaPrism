@@ -109,7 +109,8 @@ foreach my $sample (@sampleList) {
 }
 my @featureList = ();
 if($featureFile ne '') {
-	open(my $reader, );
+	die "ERROR in $0: '$featureFile' is not readable.\n" unless(-r $featureFile);
+	open(my $reader, $featureFile);
 	while(my $line = <$reader>) {
 		chomp($line);
 		my @tokenList = split(/\t/, $line, -1);
@@ -119,27 +120,28 @@ if($featureFile ne '') {
 	close($reader);
 } else {
 	@featureList = sort keys %featureHash;
-
-	my $R = Statistics::R->new();
-	$R->run('x <- data.frame()');
-	foreach my $featureIndex (0 .. $#featureList) {
-		foreach my $sampleIndex (0 .. $#sampleList) {
-			if(defined(my $abundance = $sampleFeatureAbundanceHash{$sampleList[$sampleIndex]}->{$featureList[$featureIndex]})) {
-				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), $abundance);
-			} else {
-				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), 0);
+	if(scalar(@featureList) <= 65536) {
+		my $R = Statistics::R->new();
+		$R->run('x <- data.frame()');
+		foreach my $featureIndex (0 .. $#featureList) {
+			foreach my $sampleIndex (0 .. $#sampleList) {
+				if(defined(my $abundance = $sampleFeatureAbundanceHash{$sampleList[$sampleIndex]}->{$featureList[$featureIndex]})) {
+					$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), $abundance);
+				} else {
+					$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), 0);
+				}
 			}
 		}
+		foreach my $sampleIndex (0 .. $#sampleList) {
+			$R->set(sprintf('rownames(x)[%d]', $sampleIndex + 1), $sampleList[$sampleIndex]);
+		}
+		foreach my $featureIndex (0 .. $#featureList) {
+			$R->set(sprintf('colnames(x)[%d]', $featureIndex + 1), $featureList[$featureIndex]);
+		}
+		$R->run('hc <- hclust(as.dist(1 - cor(x, method = "spearman")))');
+		@featureList = @{$R->get('hc$labels[hc$order]')};
+		$R->stop();
 	}
-	foreach my $sampleIndex (0 .. $#sampleList) {
-		$R->set(sprintf('rownames(x)[%d]', $sampleIndex + 1), $sampleList[$sampleIndex]);
-	}
-	foreach my $featureIndex (0 .. $#featureList) {
-		$R->set(sprintf('colnames(x)[%d]', $featureIndex + 1), $featureList[$featureIndex]);
-	}
-	$R->run('hc <- hclust(as.dist(1 - cor(x, method = "spearman")))');
-	@featureList = @{$R->get('hc$labels[hc$order]')};
-	$R->stop();
 }
 
 if(@featureList) {
