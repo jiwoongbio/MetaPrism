@@ -22,7 +22,7 @@ perl ../MetaPrism_gene_prepare.pl
 #(cd P78; ./P78.sh)
 
 # Compare sample groups and identify differentially-abundant genes
-perl ../MetaPrism_comparison.pl sample.group.txt \
+perl ../MetaPrism_comparison.pl -F gene sample.group.txt \
 	P1=P1/P1.gene_taxon.region.abundance.txt \
 	P2=P2/P2.gene_taxon.region.abundance.txt \
 	P3=P3/P3.gene_taxon.region.abundance.txt \
@@ -39,7 +39,7 @@ perl ../MetaPrism_comparison.pl sample.group.txt \
 	P55=P55/P55.gene_taxon.region.abundance.txt \
 	P63=P63/P63.gene_taxon.region.abundance.txt \
 	P78=P78/P78.gene_taxon.region.abundance.txt \
-	> comparison.txt
+	> gene.comparison.txt
 
 # Prediction model accuracy
 perl ../MetaPrism_prediction.pl sample.group.txt \
@@ -81,8 +81,10 @@ perl ../MetaPrism_table.pl -F taxon_average -s \
 	P78=P78/P78.gene_taxon.region.abundance.txt \
 	> taxon.table.txt
 
+awk -F'\t' '(NR == 1 || ($4 > 1 && $5 < 0.01))' gene.comparison.txt > gene.comparison.filtered.txt
+
 # Generate heatmap
-perl ../MetaPrism_heatmap.pl -F gene \
+perl ../MetaPrism_heatmap.pl -F gene -s -g gene.comparison.filtered.txt -r both \
 	P1=P1/P1.gene_taxon.region.abundance.txt \
 	P2=P2/P2.gene_taxon.region.abundance.txt \
 	P3=P3/P3.gene_taxon.region.abundance.txt \

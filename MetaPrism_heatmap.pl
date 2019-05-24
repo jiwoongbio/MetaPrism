@@ -19,6 +19,7 @@ GetOptions(
 	'F=s' => \(my $featureType = 'gene_taxon'),
 	's' => \(my $scale = ''),
 	'g=s' => \(my $featureFile = ''),
+	'r=s' => \(my $reorder = ''),
 	't=i' => \(my $taxonAbbreviationLength = 4),
 	'f=i' => \(my $fontSize = 15),
 	'w=i' => \(my $tdWidth = 60),
@@ -35,6 +36,7 @@ Options: -h       display this help message
          -R STR   taxon rank [$taxonRank]
          -F STR   feature type, $featureTypes [$featureType]
          -s       scale
+         -r STR   reorder feature, sample, or both
          -g FILE  feature file
          -t INT   taxon abbreviation length [$taxonAbbreviationLength]
          -f INT   HTML font size [$fontSize]
@@ -120,28 +122,35 @@ if($featureFile ne '') {
 	close($reader);
 } else {
 	@featureList = sort keys %featureHash;
-	if(scalar(@featureList) <= 65536) {
-		my $R = Statistics::R->new();
-		$R->run('x <- data.frame()');
-		foreach my $featureIndex (0 .. $#featureList) {
-			foreach my $sampleIndex (0 .. $#sampleList) {
-				if(defined(my $abundance = $sampleFeatureAbundanceHash{$sampleList[$sampleIndex]}->{$featureList[$featureIndex]})) {
-					$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), $abundance);
-				} else {
-					$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), 0);
-				}
+}
+
+if($reorder eq 'feature' || $reorder eq 'sample' || $reorder eq 'both') {
+	my $R = Statistics::R->new();
+	$R->run('x <- data.frame()');
+	foreach my $featureIndex (0 .. $#featureList) {
+		foreach my $sampleIndex (0 .. $#sampleList) {
+			if(defined(my $abundance = $sampleFeatureAbundanceHash{$sampleList[$sampleIndex]}->{$featureList[$featureIndex]})) {
+				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), $abundance);
+			} else {
+				$R->set(sprintf('x[%d, %d]', $sampleIndex + 1, $featureIndex + 1), 0);
 			}
 		}
-		foreach my $sampleIndex (0 .. $#sampleList) {
-			$R->set(sprintf('rownames(x)[%d]', $sampleIndex + 1), $sampleList[$sampleIndex]);
-		}
-		foreach my $featureIndex (0 .. $#featureList) {
-			$R->set(sprintf('colnames(x)[%d]', $featureIndex + 1), $featureList[$featureIndex]);
-		}
+	}
+	foreach my $sampleIndex (0 .. $#sampleList) {
+		$R->set(sprintf('rownames(x)[%d]', $sampleIndex + 1), $sampleList[$sampleIndex]);
+	}
+	foreach my $featureIndex (0 .. $#featureList) {
+		$R->set(sprintf('colnames(x)[%d]', $featureIndex + 1), $featureList[$featureIndex]);
+	}
+	if($reorder eq 'feature' || $reorder eq 'both') {
 		$R->run('hc <- hclust(as.dist(1 - cor(x, method = "spearman")))');
 		@featureList = @{$R->get('hc$labels[hc$order]')};
-		$R->stop();
 	}
+	if($reorder eq 'sample' || $reorder eq 'both') {
+		$R->run('hc <- hclust(as.dist(1 - cor(t(x), method = "spearman")))');
+		@sampleList = @{$R->get('hc$labels[hc$order]')};
+	}
+	$R->stop();
 }
 
 if(@featureList) {
