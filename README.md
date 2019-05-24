@@ -114,7 +114,7 @@ Options: -h       display this help message
          -R STR   taxon rank [genus]
          -F STR   feature type, "gene_taxon", "gene", "gene_average", "taxon", "taxon_average" [gene_taxon]
          -s       scale
-         -f FILE  feature file
+         -g FILE  feature file
          -t INT   taxon abbreviation length [4]
          -f INT   HTML font size [15]
          -w INT   HTML table cell width [60]

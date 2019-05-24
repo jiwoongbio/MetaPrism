@@ -18,7 +18,7 @@ GetOptions(
 	'R=s' => \(my $taxonRank = 'genus'),
 	'F=s' => \(my $featureType = 'gene_taxon'),
 	's' => \(my $scale = ''),
-	'f=s' => \(my $featureFile = ''),
+	'g=s' => \(my $featureFile = ''),
 	't=i' => \(my $taxonAbbreviationLength = 4),
 	'f=i' => \(my $fontSize = 15),
 	'w=i' => \(my $tdWidth = 60),
@@ -35,7 +35,7 @@ Options: -h       display this help message
          -R STR   taxon rank [$taxonRank]
          -F STR   feature type, $featureTypes [$featureType]
          -s       scale
-         -f FILE  feature file
+         -g FILE  feature file
          -t INT   taxon abbreviation length [$taxonAbbreviationLength]
          -f INT   HTML font size [$fontSize]
          -w INT   HTML table cell width [$tdWidth]
