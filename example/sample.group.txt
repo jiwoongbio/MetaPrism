@@ -1,0 +1,13 @@
+P10	Response
+P14	Response
+P23	Response
+P25	Response
+P34	Response
+P39	Response
+P8	Progressive
+P16	Progressive
+P22	Progressive
+P24	Progressive
+P30	Progressive
+P32	Progressive
+P42	Progressive
