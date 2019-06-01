@@ -1,5 +1,7 @@
 # MetaPrism
-Taxonomical and Functional Profiling for Shotgun Metagenomic Sequencing
+MetaPrism: A Toolkit for Joint Analysis of Meta-genomic Sequencing Data 
+
+MetaPrism provides joint profile (infer both taxonomical and functional profile) for shotgun metagenomic sequencing data. It also offer tools to 1) classify sequence reads and estimate the abundances for taxa-specific genes; 2) tabularize and visualize taxa-specific gene abundances; 3) build asso-ciation and prediction models for comparative analysis. 
 
 
 ## Requirements
