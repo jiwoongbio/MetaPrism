@@ -1,21 +1,21 @@
 #!/bin/env bash
 
 # Prepare database files
-perl ../MetaPrism_gene_prepare.pl
+#perl ../MetaPrism_gene_prepare.pl
 
 # Gene-taxon annotation and abundance quantification
-(cd P10; ./P10.sh)
-(cd P14; ./P14.sh)
-(cd P23; ./P23.sh)
-(cd P25; ./P25.sh)
-(cd P34; ./P34.sh)
-(cd P39; ./P39.sh)
-(cd P8; ./P8.sh)
-(cd P16; ./P16.sh)
-(cd P24; ./P24.sh)
-(cd P30; ./P30.sh)
-(cd P32; ./P32.sh)
-(cd P42; ./P42.sh)
+#(cd P10; ./P10.sh)
+#(cd P14; ./P14.sh)
+#(cd P23; ./P23.sh)
+#(cd P25; ./P25.sh)
+#(cd P34; ./P34.sh)
+#(cd P39; ./P39.sh)
+#(cd P8; ./P8.sh)
+#(cd P16; ./P16.sh)
+#(cd P24; ./P24.sh)
+#(cd P30; ./P30.sh)
+#(cd P32; ./P32.sh)
+#(cd P42; ./P42.sh)
 
 # Compare sample groups and identify differentially-abundant genes
 perl ../MetaPrism_comparison.pl -F gene sample.group.txt \
