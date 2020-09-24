@@ -1,7 +1,8 @@
+#!/bin/env perl
 # Author: Jiwoong Kim (jiwoongbio@gmail.com)
 use strict;
 use warnings;
-local $SIG{__WARN__} = sub { die "ERROR in $0: ", $_[0] };
+local $SIG{__WARN__} = sub { die $_[0] };
 
 use Cwd 'abs_path';
 use Getopt::Long qw(:config no_ignore_case);
@@ -9,18 +10,17 @@ use Statistics::R;
 use Bio::DB::Taxonomy;
 
 (my $codePath = abs_path($0)) =~ s/\/[^\/]*$//;
-my $dataPath = "$codePath/MetaPrism_data";
+my $dataPath = "$codePath/data";
 system("mkdir -p $dataPath");
 
 GetOptions(
 	'h' => \(my $help = ''),
-	'A=s' => \(my $abundanceColumn = 'meanDepth/genome'),
 	'R=s' => \(my $taxonRank = 'genus'),
 	'F=s' => \(my $featureType = 'gene_taxon'),
 	't=s' => \(my $test = 'kruskal'),
 	'o=f' => \(my $offset = 1),
 );
-my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'taxon', 'taxon_average');
+my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'gene_average_fraction', 'taxon', 'taxon_average', 'taxon_average_fraction');
 my $featureTypes = join(', ', map {"\"$_\""} @featureTypeList);
 my @testList = ('kruskal', 'anova', 'poisson', 'quasipoisson', 'metagenomeSeq');
 my $tests = join(', ', map {"\"$_\""} @testList);
@@ -30,7 +30,6 @@ if($help || scalar(@ARGV) == 0) {
 Usage:   perl MetaPrism_comparison.pl [options] sample.group.txt [sample=]abundance.txt [...] > MetaPrism_comparison.txt
 
 Options: -h       display this help message
-         -A STR   abundance column [$abundanceColumn]
          -R STR   taxon rank [$taxonRank]
          -F STR   feature type, $featureTypes [$featureType]
          -t STR   statistical test for comparing sample groups, $tests [$test]
@@ -70,7 +69,7 @@ my $number = 0;
 }
 
 my %numberFeatureAbundanceHash = ();
-my %numberFeatureCountHash = ();
+my %featureHash = ();
 my %geneDefinitionHash = ();
 @sampleFileList = map {[$_->[0], $_->[-1]]} map {[split(/=/, $_, 2)]} @sampleFileList;
 foreach(@sampleFileList) {
@@ -83,35 +82,33 @@ foreach(@sampleFileList) {
 			chomp($line);
 			my %tokenHash = ();
 			@tokenHash{@columnList} = split(/\t/, $line, -1);
+			my $taxonName = getTaxonName($tokenHash{'taxonId'});
 			my $feature = '';
 			if($featureType eq 'gene_taxon') {
-				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
-					$feature = join("\t", $tokenHash{'gene'}, $taxonName);
-				}
-			} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
-				$feature = $tokenHash{'gene'};
-			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
-				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
-					$feature = $taxonName;
-				}
+				$featureHash{$feature = join("\t", $tokenHash{'gene'}, $taxonName)} = 1;
+			} elsif($featureType eq 'gene' || $featureType eq 'gene_average' || $featureType eq 'gene_average_fraction') {
+				$featureHash{$feature = $tokenHash{'gene'}}->{$taxonName} = 1;
+			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average' || $featureType eq 'taxon_average_fraction') {
+				$featureHash{$feature = $taxonName}->{$tokenHash{'gene'}} = 1;
 			}
-			if($feature ne '') {
-				$numberFeatureAbundanceHash{$_}->{$feature} += $tokenHash{$abundanceColumn} foreach(@$numberList);
-				$numberFeatureCountHash{$_}->{$feature} += 1 foreach(@$numberList);
-			}
+			$numberFeatureAbundanceHash{$_}->{$feature} += $tokenHash{'abundance'} foreach(@$numberList);
 			$geneDefinitionHash{$tokenHash{'gene'}} = $tokenHash{'definition'} if(defined($tokenHash{'definition'}) && $tokenHash{'definition'} ne '');
 		}
 		close($reader);
 	}
 }
-if($featureType eq 'gene_average' || $featureType eq 'taxon_average') {
-	foreach my $number (1 .. $number) {
-		$numberFeatureAbundanceHash{$number}->{$_} /= $numberFeatureCountHash{$number}->{$_} foreach(keys %{$numberFeatureAbundanceHash{$number}});
+if($featureType eq 'gene_average' || $featureType eq 'taxon_average' || $featureType eq 'gene_average_fraction' || $featureType eq 'taxon_average_fraction') {
+	foreach my $feature (keys %featureHash) {
+		my $count = scalar(keys %{$featureHash{$feature}});
+		$numberFeatureAbundanceHash{$_}->{$feature} /= $count foreach(grep {defined($numberFeatureAbundanceHash{$_}->{$feature})} 1 .. $number);
 	}
 }
-my %featureHash = ();
-foreach my $number (1 .. $number) {
-	$featureHash{$_} = 1 foreach(keys %{$numberFeatureAbundanceHash{$number}});
+if($featureType eq 'gene_average_fraction' || $featureType eq 'taxon_average_fraction') {
+	foreach my $number (1 .. $number) {
+		my $sum = 0;
+		$sum += $numberFeatureAbundanceHash{$number}->{$_} foreach(keys %{$numberFeatureAbundanceHash{$number}});
+		$numberFeatureAbundanceHash{$number}->{$_} /= $sum foreach(keys %{$numberFeatureAbundanceHash{$number}});
+	}
 }
 
 if(my @featureList = sort keys %featureHash) {
@@ -192,7 +189,7 @@ if(my @featureList = sort keys %featureHash) {
 				print join("\t", map {defined($_) ? $_ : ''} @tokenHash{@columnList}), "\n";
 			}
 		}
-	} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
+	} elsif($featureType eq 'gene' || $featureType eq 'gene_average' || $featureType eq 'gene_average_fraction') {
 		if(%geneDefinitionHash) {
 			my @columnList = ('gene', 'definition', 'group', 'log2foldchange', 'p.value', 'p.adjust');
 			print join("\t", @columnList), "\n";
@@ -213,7 +210,7 @@ if(my @featureList = sort keys %featureHash) {
 				print join("\t", map {defined($_) ? $_ : ''} @tokenHash{@columnList}), "\n";
 			}
 		}
-	} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
+	} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average' || $featureType eq 'taxon_average_fraction') {
 		my @columnList = ('taxon', 'group', 'log2foldchange', 'p.value', 'p.adjust');
 		print join("\t", @columnList), "\n";
 		foreach my $index (0 .. $#featureList) {
@@ -228,10 +225,10 @@ if(my @featureList = sort keys %featureHash) {
 
 sub getTaxonName {
 	my ($taxonId) = @_;
-	if(defined(my $taxon = $db->get_taxon(-taxonid => $taxonId))) {
+	if(defined($taxonId) && defined(my $taxon = $db->get_taxon(-taxonid => $taxonId))) {
 		do {
 			return $taxon->scientific_name if($taxon->rank eq $taxonRank);
 		} while(defined($taxon = $taxon->ancestor));
 	}
-	return '';
+	return 'undefined';
 }

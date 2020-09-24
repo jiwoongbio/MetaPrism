@@ -19,7 +19,7 @@ GetOptions(
 	'F=s' => \(my $featureType = 'gene_taxon'),
 	's' => \(my $scale = ''),
 );
-my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'taxon', 'taxon_average');
+my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'gene_average_fraction', 'taxon', 'taxon_average', 'taxon_average_fraction');
 my $featureTypes = join(', ', map {"\"$_\""} @featureTypeList);
 if($help || scalar(@ARGV) == 0) {
 	die <<EOF;
@@ -51,7 +51,7 @@ my $db = Bio::DB::Taxonomy->new(-source => 'flatfile', -directory => $dataPath, 
 
 my @sampleList = ();
 my %sampleFeatureAbundanceHash = ();
-my %sampleFeatureCountHash = ();
+my %featureHash = ();
 my %geneDefinitionHash = ();
 @sampleFileList = map {[$_->[0], $_->[-1]]} map {[split(/=/, $_, 2)]} @sampleFileList;
 foreach(@sampleFileList) {
@@ -65,35 +65,33 @@ foreach(@sampleFileList) {
 			chomp($line);
 			my %tokenHash = ();
 			@tokenHash{@columnList} = split(/\t/, $line, -1);
+			my $taxonName = getTaxonName($tokenHash{'taxon'});
 			my $feature = '';
 			if($featureType eq 'gene_taxon') {
-				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
-					$feature = join("\t", $tokenHash{'gene'}, $taxonName);
-				}
-			} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
-				$feature = $tokenHash{'gene'};
-			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
-				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
-					$feature = $taxonName;
-				}
+				$featureHash{$feature = join("\t", $tokenHash{'gene'}, $taxonName)} = 1;
+			} elsif($featureType eq 'gene' || $featureType eq 'gene_average' || $featureType eq 'gene_average_fraction') {
+				$featureHash{$feature = $tokenHash{'gene'}}->{$taxonName} = 1;
+			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average' || $featureType eq 'taxon_average_fraction') {
+				$featureHash{$feature = $taxonName}->{$tokenHash{'gene'}} = 1;
 			}
-			if($feature ne '') {
-				$sampleFeatureAbundanceHash{$sample}->{$feature} += $tokenHash{$abundanceColumn};
-				$sampleFeatureCountHash{$sample}->{$feature} += 1;
-			}
+			$sampleFeatureAbundanceHash{$sample}->{$feature} += $tokenHash{$abundanceColumn};
 			$geneDefinitionHash{$tokenHash{'gene'}} = $tokenHash{'definition'} if(defined($tokenHash{'definition'}) && $tokenHash{'definition'} ne '');
 		}
 		close($reader);
 	}
 }
-if($featureType eq 'gene_average' || $featureType eq 'taxon_average') {
-	foreach my $sample (@sampleList) {
-		$sampleFeatureAbundanceHash{$sample}->{$_} /= $sampleFeatureCountHash{$sample}->{$_} foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
+if($featureType eq 'gene_average' || $featureType eq 'taxon_average' || $featureType eq 'gene_average_fraction' || $featureType eq 'taxon_average_fraction') {
+	foreach my $feature (keys %featureHash) {
+		my $count = scalar(keys %{$featureHash{$feature}});
+		$sampleFeatureAbundanceHash{$_}->{$feature} /= $count foreach(grep {defined($sampleFeatureAbundanceHash{$_}->{$feature})} @sampleList);
 	}
 }
-my %featureHash = ();
-foreach my $sample (@sampleList) {
-	$featureHash{$_} = 1 foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
+if($featureType eq 'gene_average_fraction' || $featureType eq 'taxon_average_fraction') {
+	foreach my $sample (@sampleList) {
+		my $sum = 0;
+		$sum += $sampleFeatureAbundanceHash{$sample}->{$_} foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
+		$sampleFeatureAbundanceHash{$sample}->{$_} /= $sum foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
+	}
 }
 
 if(my @featureList = sort keys %featureHash) {
@@ -120,7 +118,7 @@ if(my @featureList = sort keys %featureHash) {
 				print join("\t", (map {defined($_) ? $_ : ''} @tokenHash{@featureColumnList}), @abundanceList), "\n";
 			}
 		}
-	} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
+	} elsif($featureType eq 'gene' || $featureType eq 'gene_average' || $featureType eq 'gene_average_fraction') {
 		if(%geneDefinitionHash) {
 			my @featureColumnList = ('gene', 'definition');
 			print join("\t", @featureColumnList, @sampleList), "\n";
@@ -143,7 +141,7 @@ if(my @featureList = sort keys %featureHash) {
 				print join("\t", (map {defined($_) ? $_ : ''} @tokenHash{@featureColumnList}), @abundanceList), "\n";
 			}
 		}
-	} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
+	} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average' || $featureType eq 'taxon_average_fraction') {
 		my @featureColumnList = ('taxon');
 		print join("\t", @featureColumnList, @sampleList), "\n";
 		foreach my $feature (@featureList) {
@@ -165,15 +163,19 @@ sub scale {
 	$sd += ($_ - $mean) ** 2 foreach(@valueList);
 	$sd /= scalar(@valueList) - 1;
 	$sd = $sd ** 0.5;
-	return map {($_ - $mean) / $sd} @valueList;
+	if($sd > 0) {
+		return map {($_ - $mean) / $sd} @valueList;
+	} else {
+		return map {$_ - $mean} @valueList;
+	}
 }
 
 sub getTaxonName {
 	my ($taxonId) = @_;
-	if(defined(my $taxon = $db->get_taxon(-taxonid => $taxonId))) {
+	if(defined($taxonId) && defined(my $taxon = $db->get_taxon(-taxonid => $taxonId))) {
 		do {
 			return $taxon->scientific_name if($taxon->rank eq $taxonRank);
 		} while(defined($taxon = $taxon->ancestor));
 	}
-	return '';
+	return 'undefined';
 }

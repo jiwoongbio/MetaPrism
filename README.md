@@ -1,7 +1,5 @@
 # MetaPrism
-MetaPrism: A Toolkit for Joint Analysis of Meta-genomic Sequencing Data 
-
-MetaPrism provides joint profile (infer both taxonomical and functional profile) for shotgun metagenomic sequencing data. It also offer tools to 1) classify sequence reads and estimate the abundances for taxa-specific genes; 2) tabularize and visualize taxa-specific gene abundances; 3) build asso-ciation and prediction models for comparative analysis. 
+Taxonomical and Functional Profiling for Shotgun Metagenomic Sequencing
 
 
 ## Requirements
@@ -10,11 +8,12 @@ MetaPrism provides joint profile (infer both taxonomical and functional profile)
 2. R - http://www.r-project.org
 3. Perl module Statistics::R - https://metacpan.org/pod/Statistics::R
 4. R library caret - https://cran.r-project.org/web/packages/caret/index.html
-5. DIAMOND - https://github.com/bbuchfink/diamond or USEARCH - https://www.drive5.com/usearch/
-6. BWA - http://bio-bwa.sourceforge.net
-7. Samtools - http://www.htslib.org
-8. Centrifuge - https://ccb.jhu.edu/software/centrifuge/
-9. Linux commands: sort, wget - https://www.gnu.org/software/wget/
+5. R library randomForest
+6. DIAMOND - https://github.com/bbuchfink/diamond or USEARCH - https://www.drive5.com/usearch/
+7. BWA - http://bio-bwa.sourceforge.net
+8. Samtools - http://www.htslib.org
+9. Centrifuge - https://ccb.jhu.edu/software/centrifuge/
+10. Linux commands: sort, wget - https://www.gnu.org/software/wget/
 
 
 ## Install
