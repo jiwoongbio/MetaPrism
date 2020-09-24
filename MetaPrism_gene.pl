@@ -325,7 +325,7 @@ if($genomeNotPrepared) { # ORF translation mapping
 	}
 }
 
-if(@contigList && @bamFileList) { # Abundance estimation
+if(@bamFileList) { # Abundance estimation
 	my %contigSequenceLengthHash = ();
 	{
 		open(my $reader, $genomeFastaFile);

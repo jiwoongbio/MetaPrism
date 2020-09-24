@@ -18,14 +18,13 @@ GetOptions(
 	'R=s' => \(my $taxonRank = 'genus'),
 	'F=s' => \(my $featureType = 'gene_taxon'),
 	's' => \(my $scale = ''),
-	'p' => \(my $proportion = ''),
 	'g=s' => \(my $featureFile = ''),
 	'r=s' => \(my $reorder = ''),
 	't=i' => \(my $taxonAbbreviationLength = 4),
 	'f=i' => \(my $fontSize = 15),
 	'w=i' => \(my $tdWidth = 60),
 );
-my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'gene_average_fraction', 'taxon', 'taxon_average', 'taxon_average_fraction');
+my @featureTypeList = ('gene_taxon', 'gene', 'gene_average', 'taxon', 'taxon_average');
 my $featureTypes = join(', ', map {"\"$_\""} @featureTypeList);
 if($help || scalar(@ARGV) == 0) {
 	die <<EOF;
@@ -37,7 +36,6 @@ Options: -h       display this help message
          -R STR   taxon rank [$taxonRank]
          -F STR   feature type, $featureTypes [$featureType]
          -s       scale
-         -p       proportion
          -r STR   reorder feature, sample, or both
          -g FILE  feature file
          -t INT   taxon abbreviation length [$taxonAbbreviationLength]
@@ -63,7 +61,7 @@ my $db = Bio::DB::Taxonomy->new(-source => 'flatfile', -directory => $dataPath, 
 
 my @sampleList = ();
 my %sampleFeatureAbundanceHash = ();
-my %featureHash = ();
+my %sampleFeatureCountHash = ();
 my %sampleGeneTaxonAbundanceHash = ();
 my %geneDefinitionHash = ();
 @sampleFileList = map {[$_->[0], $_->[-1]]} map {[split(/=/, $_, 2)]} @sampleFileList;
@@ -78,34 +76,38 @@ foreach(@sampleFileList) {
 			chomp($line);
 			my %tokenHash = ();
 			@tokenHash{@columnList} = split(/\t/, $line, -1);
-			$tokenHash{'gene'} = $tokenHash{'orthology'} if(!defined($tokenHash{'gene'}) && defined($tokenHash{'orthology'}));
-			my $taxonName = getTaxonName($tokenHash{'taxon'});
 			my $feature = '';
 			if($featureType eq 'gene_taxon') {
-				$featureHash{$feature = join("\t", $tokenHash{'gene'}, $taxonName)} = 1;
-			} elsif($featureType eq 'gene' || $featureType eq 'gene_average' || $featureType eq 'gene_average_fraction') {
-				$featureHash{$feature = $tokenHash{'gene'}}->{$taxonName} = 1;
-			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average' || $featureType eq 'taxon_average_fraction') {
-				$featureHash{$feature = $taxonName}->{$tokenHash{'gene'}} = 1;
+				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
+					$feature = join("\t", $tokenHash{'gene'}, $taxonName);
+				}
+			} elsif($featureType eq 'gene' || $featureType eq 'gene_average') {
+				$feature = $tokenHash{'gene'};
+				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
+					$sampleGeneTaxonAbundanceHash{$sample}->{$feature}->{$taxonName} += $tokenHash{$abundanceColumn};
+				}
+			} elsif($featureType eq 'taxon' || $featureType eq 'taxon_average') {
+				if((my $taxonName = getTaxonName($tokenHash{'taxon'})) ne '') {
+					$feature = $taxonName;
+				}
 			}
-			$sampleFeatureAbundanceHash{$sample}->{$feature} += $tokenHash{$abundanceColumn};
+			if($feature ne '') {
+				$sampleFeatureAbundanceHash{$sample}->{$feature} += $tokenHash{$abundanceColumn};
+				$sampleFeatureCountHash{$sample}->{$feature} += 1;
+			}
 			$geneDefinitionHash{$tokenHash{'gene'}} = $tokenHash{'definition'} if(defined($tokenHash{'definition'}) && $tokenHash{'definition'} ne '');
 		}
 		close($reader);
 	}
 }
-if($featureType eq 'gene_average' || $featureType eq 'taxon_average' || $featureType eq 'gene_average_fraction' || $featureType eq 'taxon_average_fraction') {
-	foreach my $feature (keys %featureHash) {
-		my $count = scalar(keys %{$featureHash{$feature}});
-		$sampleFeatureAbundanceHash{$_}->{$feature} /= $count foreach(grep {defined($sampleFeatureAbundanceHash{$_}->{$feature})} @sampleList);
+if($featureType eq 'gene_average' || $featureType eq 'taxon_average') {
+	foreach my $sample (@sampleList) {
+		$sampleFeatureAbundanceHash{$sample}->{$_} /= $sampleFeatureCountHash{$sample}->{$_} foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
 	}
 }
-if($featureType eq 'gene_average_fraction' || $featureType eq 'taxon_average_fraction') {
-	foreach my $sample (@sampleList) {
-		my $sum = 0;
-		$sum += $sampleFeatureAbundanceHash{$sample}->{$_} foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
-		$sampleFeatureAbundanceHash{$sample}->{$_} /= $sum foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
-	}
+my %featureHash = ();
+foreach my $sample (@sampleList) {
+	$featureHash{$_} = 1 foreach(keys %{$sampleFeatureAbundanceHash{$sample}});
 }
 my @featureList = ();
 if($featureFile ne '') {
@@ -237,8 +239,6 @@ EOF
 		my @colorList = ();
 		if($scale) {
 			@colorList = map {$_ > 0 ? color(1, ($maximumScale - $_) / $maximumScale, 0) : color(($maximumScale - abs($_)) / $maximumScale, 1, 0)} scale(@abundanceList);
-		} elsif($proportion) {
-			@colorList = map {$_ > 0.5 ? color(1, (1 - $_) * 2, 0) : color($_ * 2, 1, 0)} map {$_ < 0 ? 0 : $_ > 1 ? 1 : $_} @abundanceList;
 		} else {
 			@colorList = map {$_ > 1 ? color(1, 1 / $_, 0) : color($_, 1, 0)} @abundanceList;
 		}
@@ -260,13 +260,12 @@ EOF
 	print "</table></td>\n";
 	print "<td><table class=\"heatmap\">\n";
 	if($scale) {
-		foreach(map {$maximumScale * (5 - $_) / 5} 0 .. 10) {
-			my $color = $_ > 0 ? color(1, ($maximumScale - $_) / $maximumScale, 0) : color(($maximumScale - abs($_)) / $maximumScale, 1, 0);
+		foreach(map {$maximumScale * (5 - $_) / 5} 0 .. 4) {
+			my $color = color(1, ($maximumScale - $_) / $maximumScale, 0);
 			print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$_</td></tr>\n";
 		}
-	} elsif($proportion) {
-		foreach(map {1 - $_ * 0.1} 0 .. 10) {
-			my $color = $_ > 0.5 ? color(1, (1 - $_) * 2, 0) : color($_ * 2, 1, 0);
+		foreach(map {$maximumScale * (0 - $_) / 5} 0 .. 5) {
+			my $color = color(($maximumScale - abs($_)) / $maximumScale, 1, 0);
 			print "<tr><td style=\"text-align: center; width: ${tdWidth}px; background-color: $color;\">$_</td></tr>\n";
 		}
 	} else {
@@ -298,11 +297,7 @@ sub scale {
 	$sd += ($_ - $mean) ** 2 foreach(@valueList);
 	$sd /= scalar(@valueList) - 1;
 	$sd = $sd ** 0.5;
-	if($sd > 0) {
-		return map {($_ - $mean) / $sd} @valueList;
-	} else {
-		return map {$_ - $mean} @valueList;
-	}
+	return map {($_ - $mean) / $sd} @valueList;
 }
 
 sub color {
@@ -313,10 +308,10 @@ sub color {
 
 sub getTaxonName {
 	my ($taxonId) = @_;
-	if(defined($taxonId) && defined(my $taxon = $db->get_taxon(-taxonid => $taxonId))) {
+	if(defined(my $taxon = $db->get_taxon(-taxonid => $taxonId))) {
 		do {
 			return $taxon->scientific_name if($taxon->rank eq $taxonRank);
 		} while(defined($taxon = $taxon->ancestor));
 	}
-	return 'undefined';
+	return '';
 }

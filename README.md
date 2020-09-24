@@ -1,5 +1,7 @@
 # MetaPrism
-Taxonomical and Functional Profiling for Shotgun Metagenomic Sequencing
+MetaPrism: A Toolkit for Joint Analysis of Meta-genomic Sequencing Data 
+
+MetaPrism provides joint profile (infer both taxonomical and functional profile) for shotgun metagenomic sequencing data. It also offer tools to 1) classify sequence reads and estimate the abundances for taxa-specific genes; 2) tabularize and visualize taxa-specific gene abundances; 3) build asso-ciation and prediction models for comparative analysis. 
 
 
 ## Requirements
@@ -8,7 +10,7 @@ Taxonomical and Functional Profiling for Shotgun Metagenomic Sequencing
 2. R - http://www.r-project.org
 3. Perl module Statistics::R - https://metacpan.org/pod/Statistics::R
 4. R library caret - https://cran.r-project.org/web/packages/caret/index.html
-5. R library randomForest
+5. R library randomForest - https://cran.r-project.org/web/packages/randomForest/index.html
 6. DIAMOND - https://github.com/bbuchfink/diamond or USEARCH - https://www.drive5.com/usearch/
 7. BWA - http://bio-bwa.sourceforge.net
 8. Samtools - http://www.htslib.org
