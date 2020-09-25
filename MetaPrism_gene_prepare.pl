@@ -96,7 +96,7 @@ if($database =~ /^orthology_uniref/) {
 
 sub downloadFile {
 	foreach my $file (@_) {
-		system("wget --no-verbose -O $dataPath/$file $dataURL/$file") if(not -r "$dataPath/$file" or $redownload);
+		system("wget --no-verbose --no-check-certificate -O $dataPath/$file $dataURL/$file") if(not -r "$dataPath/$file" or $redownload);
 	}
 }
 
