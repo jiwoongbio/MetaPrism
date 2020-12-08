@@ -122,3 +122,9 @@ Options: -h       display this help message
          -f INT   HTML font size [15]
          -w INT   HTML table cell width [60]
 ```
+
+
+## Citation
+
+MetaPrism: A Toolkit for Joint Taxa/Gene Analysis of Metagenomic Sequencing Data
+https://www.biorxiv.org/content/10.1101/664748v1
