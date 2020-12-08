@@ -99,7 +99,7 @@ Options: -h       display this help message
 
 * MetaPrism_table.pl
 ```
-Usage:   perl MetaPrism_table.pl [options] \[sample=\]abundance.txt [...] > table.txt
+Usage:   perl MetaPrism_table.pl [options] &#91;sample=&#93;abundance.txt [...] > table.txt
 
 Options: -h       display this help message
          -A STR   abundance column [meanDepth/genome]
@@ -110,7 +110,7 @@ Options: -h       display this help message
 
 * MetaPrism_heatmap.pl
 ```
-Usage:   perl MetaPrism_heatmap.pl [options] \[sample=\]abundance.txt [...] > heatmap.html
+Usage:   perl MetaPrism_heatmap.pl [options] &#91;sample=&#93;abundance.txt [...] > heatmap.html
 
 Options: -h       display this help message
          -A STR   abundance column [meanDepth/genome]
