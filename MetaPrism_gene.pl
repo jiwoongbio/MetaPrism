@@ -4,8 +4,9 @@ use warnings;
 local $SIG{__WARN__} = sub { die "ERROR in $0: ", $_[0] };
 
 use Cwd 'abs_path';
-use Getopt::Long qw(:config no_ignore_case);
+use IPC::Open2;
 use List::Util qw(max);
+use Getopt::Long qw(:config no_ignore_case);
 
 (my $codePath = abs_path($0)) =~ s/\/[^\/]*$//;
 my $dataPath = "$codePath/MetaPrism_data";
@@ -14,15 +15,20 @@ system("mkdir -p $dataPath");
 my $database = loadDefaultDatabase();
 my $databasePrefix = "$dataPath/$database";
 
+chomp(my $hostname = `hostname`);
+my $temporaryDirectory = $ENV{'TMPDIR'};
+$temporaryDirectory = '/tmp' unless($temporaryDirectory);
 my @codonList = ();
 GetOptions(
 	'h' => \(my $help = ''),
+	't=s' => \$temporaryDirectory,
+	'p=i' => \(my $threads = 1),
+	'numberPerThread=i' => \(my $numberPerThread = 1000),
 	'A=s' => \(my $genomePrefix = ''),
 	'B' => \(my $bamInput = ''),
 	'm=s' => \(my $mapperPath = 'diamond'),
-	'p=i' => \(my $threads = 1),
 	'e=f' => \(my $evalue = 10),
-	't=s' => \(my $temporaryDirectory = defined($ENV{'TMPDIR'}) ? $ENV{'TMPDIR'} : '/tmp'),
+	'k=i' => \(my $maximumTarget = 100),
 	'a=f' => \(my $acceleration = 0.5),
 	'C=s' => \@codonList,
 	'S=s' => \(my $startCodons = 'GTG,ATG,CTG,TTG,ATA,ATC,ATT'),
@@ -41,12 +47,12 @@ if($help || scalar(@ARGV) == 0) {
 Usage:   perl MetaPrism_gene.pl [options] output.prefix genome.fasta [input.fastq|input.R1.fastq,input.R2.fastq [...]]
 
 Options: -h       display this help message
+         -t DIR   directory for temporary files [\$TMPDIR or /tmp]
+         -p INT   number of threads [$threads]
          -A STR   prepared genome prefix
          -B       input indexed sorted BAM file instead of FASTQ file
          -m FILE  executable file path of mapping program, "diamond" or "usearch" [$mapperPath]
-         -p INT   number of threads [$threads]
          -e FLOAT maximum e-value to report alignments [$evalue]
-         -t DIR   directory for temporary files [\$TMPDIR or /tmp]
          -a FLOAT search acceleration for ublast [$acceleration]
          -C STR   codon and translation e.g. ATG=M [NCBI genetic code 11 (Bacterial, Archaeal and Plant Plastid)]
          -S STR   comma-separated start codons [$startCodons]
@@ -58,6 +64,53 @@ Options: -h       display this help message
          -P STR   contig prefix used for abundance estimation
 
 EOF
+}
+{
+	my $parentPid = $$;
+	my %pidHash = ();
+	my $writer;
+	my $parentWriter;
+	sub forkPrintParentWriter {
+		($parentWriter) = @_;
+	}
+	sub forkPrintSubroutine {
+		my ($subroutine, @arguments) = @_;
+		if(my $pid = fork()) {
+			$pidHash{$pid} = 1;
+		} else {
+			open($writer, "> $temporaryDirectory/fork.$hostname.$parentPid.$$");
+			$subroutine->(@arguments);
+			close($writer);
+			exit(0);
+		}
+		forkPrintWait($threads);
+	}
+	sub forkPrintWait {
+		my ($number) = (@_, 1);
+		while(scalar(keys %pidHash) >= $number) {
+			my $pid = wait();
+			if($pidHash{$pid}) {
+				open(my $reader, "$temporaryDirectory/fork.$hostname.$parentPid.$pid");
+				if(defined($parentWriter)) {
+					print $parentWriter $_ while(<$reader>);
+				} else {
+					print $_ while(<$reader>);
+				}
+				close($reader);
+				system("rm $temporaryDirectory/fork.$hostname.$parentPid.$pid");
+				delete $pidHash{$pid};
+			}
+		}
+	}
+	sub forkPrint {
+		if(defined($writer)) {
+			print $writer @_;
+		} elsif(defined($parentWriter)) {
+			print $parentWriter @_;
+		} else {
+			print @_;
+		}
+	}
 }
 my ($outputPrefix, $genomeFastaFile, @inputFileList) = @ARGV;
 my $genomeNotPrepared = '';
@@ -165,6 +218,10 @@ if(@inputFileList) { # Read mapping
 		}
 	}
 }
+foreach my $bamFile (@bamFileList) {
+	system("samtools index $bamFile") if(-r "$bamFile.bai");
+}
+my $samModule = eval {require Bio::DB::Sam; 1;};
 
 if($genomeNotPrepared) { # ORF translation
 	my %codonHash = (
@@ -257,9 +314,9 @@ if($genomeNotPrepared) { # ORF translation
 	}
 }
 
-my @contigList = ();
+my %contigHash = ();
 if($genomeNotPrepared) { # ORF translation mapping
-	system("$mapperPath blastp --query $genomePrefix.translation.fasta --db $databaseFile --out $genomePrefix.blast.txt --outfmt 6 --evalue $evalue --threads $threads --tmpdir $temporaryDirectory --max-target-seqs 0 1>&2") if($mapper =~ /^diamond/);
+	system("$mapperPath blastp --query $genomePrefix.translation.fasta --db $databaseFile --out $genomePrefix.blast.txt --outfmt 6 --evalue $evalue --threads $threads --tmpdir $temporaryDirectory --masking 0 --quiet --max-target-seqs $maximumTarget 1>&2") if($mapper =~ /^diamond/);
 	system("$mapperPath -ublast $genomePrefix.translation.fasta -db $databaseFile -blast6out $genomePrefix.blast.txt -evalue $evalue -accel $acceleration -threads $threads 1>&2") if($mapper =~ /^usearch/);
 
 	my %proteinSequenceLengthHash = ();
@@ -294,7 +351,6 @@ if($genomeNotPrepared) { # ORF translation mapping
 			print $writer join("\t", @columnList), "\n";
 			close($writer);
 		}
-		my %contigHash = ();
 		open(my $reader, "sort -t '\t' -k1,1 -k11,11g -k12,12gr -k13,13gr $genomePrefix.blast.filtered.txt |");
 		open(my $writer, "| sort -t '\t' -k1,1 -k2,2n -k3,3n -k4,4r -k5,5 | uniq >> $genomePrefix.region.txt");
 		my %topTokenHash = ();
@@ -321,7 +377,6 @@ if($genomeNotPrepared) { # ORF translation mapping
 		}
 		close($reader);
 		close($writer);
-		@contigList = sort keys %contigHash;
 	}
 }
 
@@ -344,20 +399,16 @@ if(@bamFileList) { # Abundance estimation
 	my $genomeMeanDepth = 0;
 	{
 		foreach my $bamFile (@bamFileList) {
-			foreach my $contig (@contigList) {
-				open(my $reader, "samtools view -F 2308 -q $minimumMappingQuality $bamFile $contig |");
-				while(my $line = <$reader>) {
-					chomp($line);
-					my %tokenHash = ();
-					@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line, -1);
-					my @positionList = getPositionList(@tokenHash{'pos', 'cigar'});
-					if(@positionList = grep {defined} @positionList) {
-						$contigMeanDepthHash{$contig} += scalar(@positionList);
-						$genomeMeanDepth += scalar(@positionList);
-					}
+			open(my $reader, "samtools view -u -F 2308 -q $minimumMappingQuality $bamFile | samtools depth - |");
+			while(my $line = <$reader>) {
+				chomp($line);
+				my ($contig, $position, $positionDepth) = split(/\t/, $line, -1);
+				if($contigHash{$contig}) {
+					$contigMeanDepthHash{$contig} += $positionDepth;
+					$genomeMeanDepth += $positionDepth;
 				}
-				close($reader);
 			}
+			close($reader);
 		}
 		my $genomeSequenceLength = 0;
 		foreach my $contig (keys %contigMeanDepthHash) {
@@ -370,46 +421,120 @@ if(@bamFileList) { # Abundance estimation
 	}
 	my @valueColumnList = ('readCount', 'RPKM', 'meanDepth', 'meanDepth/contig', 'meanDepth/genome');
 	my %geneTokenHashHash = ();
+	my $pid = open2(my $reader, my $writer, "sort -t '\t' -k1,1n -k2 | uniq");
+	forkPrintParentWriter($writer);
+	my @columnList = ();
 	{
-		my %readCountHash = ();
-		my @tokenHashList = ();
 		open(my $reader, "$genomePrefix.region.txt");
 		chomp(my $line = <$reader>);
-		my @columnList = split(/\t/, $line, -1);
+		@columnList = split(/\t/, $line, -1);
+		my $order = 0;
+		my @tokenListList = ();
 		while(my $line = <$reader>) {
 			chomp($line);
-			my %tokenHash = ();
-			@tokenHash{@columnList} = split(/\t/, $line, -1);
-			next unless($tokenHash{'contig'} =~ /^$contigPrefix/);
-			foreach my $bamFile (@bamFileList) {
-				my ($baseCount, @readList) = getBaseCountReadList($bamFile, @tokenHash{'contig', 'start', 'end', 'strand'});
-				$tokenHash{'baseCount'} += $baseCount;
-				$tokenHash{'readCount'} += scalar(@readList);
-				$readCountHash{$_} += 1 foreach(@readList);
+			my @tokenList = split(/\t/, $line, -1);
+			push(@tokenListList, [$order += 1, @tokenList]);
+			if(scalar(@tokenListList) >= $numberPerThread) {
+				if($threads == 1) {
+					printAbundance(@tokenListList);
+				} else {
+					forkPrintSubroutine(\&printAbundance, @tokenListList);
+				}
+				@tokenListList = ();
 			}
-			$tokenHash{'length'} = $tokenHash{'end'} - $tokenHash{'start'} + 1;
-			$tokenHash{'RPK'} = $tokenHash{'readCount'} / ($tokenHash{'length'} / 1000);
-			if(($tokenHash{'meanDepth'} = $tokenHash{'baseCount'} / $tokenHash{'length'}) == 0) {
-				$tokenHash{'meanDepth/contig'} = 0;
-				$tokenHash{'meanDepth/genome'} = 0;
+		}
+		if(@tokenListList) {
+			if($threads == 1) {
+				printAbundance(@tokenListList);
 			} else {
-				$tokenHash{'meanDepth/contig'} = $tokenHash{'meanDepth'} / $contigMeanDepthHash{$tokenHash{'contig'}};
-				$tokenHash{'meanDepth/genome'} = $tokenHash{'meanDepth'} / $genomeMeanDepth;
+				forkPrintSubroutine(\&printAbundance, @tokenListList);
 			}
-			push(@tokenHashList, \%tokenHash);
 		}
 		close($reader);
-		my $totalReadCount = scalar(keys %readCountHash);
+		forkPrintWait();
+
+		sub printAbundance {
+			my @samList = map {Bio::DB::Sam->new(-bam => $_)} @bamFileList if($samModule);
+			foreach(@_) {
+				my ($order, @tokenList) = @$_;
+				my %tokenHash = ();
+				@tokenHash{@columnList} = @tokenList;
+				next unless($tokenHash{'contig'} =~ /^$contigPrefix/);
+				my ($contig, $start, $end, $strand) = @tokenHash{'contig', 'start', 'end', 'strand'};
+				if($samModule) {
+					foreach my $sam (@samList) {
+						my $baseCount = 0;
+						my %readCountHash = ();
+						foreach my $alignment ($sam->get_features_by_location(-seq_id => $contig, -start => $start, -end => $end)) {
+							next if($stranded ne '' && getReadStrand($alignment->flag) ne $strand);
+							my @positionList = getPositionList($alignment->start, $alignment->cigar_str);
+							if(@positionList = grep {$start <= $_ && $_ <= $end} grep {defined} @positionList) {
+								$baseCount += scalar(@positionList);
+								$readCountHash{$alignment->qname} += 1;
+							}
+						}
+						$tokenHash{'baseCount'} += $baseCount;
+						$tokenHash{'readCount'} += scalar(keys %readCountHash);
+						forkPrint(join("\t", 0, $_), "\n") foreach(keys %readCountHash);
+					}
+				} else {
+					foreach my $bamFile (@bamFileList) {
+						my $baseCount = 0;
+						my %readCountHash = ();
+						open(my $reader, "samtools view -F 2308 -q $minimumMappingQuality $bamFile $contig:$start-$end |");
+						while(my $line = <$reader>) {
+							chomp($line);
+							my %tokenHash = ();
+							@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line, -1);
+							next if($stranded ne '' && getReadStrand($tokenHash{'flag'}) ne $strand);
+							my @positionList = getPositionList(@tokenHash{'pos', 'cigar'});
+							if(@positionList = grep {$start <= $_ && $_ <= $end} grep {defined} @positionList) {
+								$baseCount += scalar(@positionList);
+								$readCountHash{$tokenHash{'qname'}} += 1;
+							}
+						}
+						close($reader);
+						$tokenHash{'baseCount'} += $baseCount;
+						$tokenHash{'readCount'} += scalar(keys %readCountHash);
+						forkPrint(join("\t", 0, $_), "\n") foreach(keys %readCountHash);
+					}
+				}
+				$tokenHash{'length'} = $tokenHash{'end'} - $tokenHash{'start'} + 1;
+				$tokenHash{'RPKM'} = $tokenHash{'readCount'} / ($tokenHash{'length'} / 1000);
+				if(($tokenHash{'meanDepth'} = $tokenHash{'baseCount'} / $tokenHash{'length'}) == 0) {
+					$tokenHash{'meanDepth/contig'} = 0;
+					$tokenHash{'meanDepth/genome'} = 0;
+				} else {
+					$tokenHash{'meanDepth/contig'} = $tokenHash{'meanDepth'} / $contigMeanDepthHash{$tokenHash{'contig'}};
+					$tokenHash{'meanDepth/genome'} = $tokenHash{'meanDepth'} / $genomeMeanDepth;
+				}
+				forkPrint(join("\t", $order, @tokenHash{@columnList, @valueColumnList}), "\n");
+			}
+		}
+	}
+	forkPrintParentWriter();
+	close($writer);
+	{
 		open(my $writer, "> $outputPrefix.region.abundance.txt");
 		print $writer join("\t", @columnList, @valueColumnList), "\n";
-		foreach(@tokenHashList) {
-			my %tokenHash = %$_;
-			$tokenHash{'RPKM'} = $tokenHash{'RPK'} / ($totalReadCount / 1000000);
+		my $totalReadCount = 0;
+		while(my $line = <$reader>) {
+			chomp($line);
+			my ($order, @tokenList) = split(/\t/, $line, -1);
+			if($order == 0) {
+				$totalReadCount += 1;
+				next;
+			}
+			my %tokenHash = ();
+			@tokenHash{@columnList, @valueColumnList} = @tokenList;
+			$tokenHash{'RPKM'} = $tokenHash{'RPKM'} / ($totalReadCount / 1000000);
 			print $writer join("\t", @tokenHash{@columnList, @valueColumnList}), "\n";
 			$geneTokenHashHash{$tokenHash{'gene'}}->{$_} += $tokenHash{$_} foreach(@valueColumnList);
 		}
 		close($writer);
 	}
+	close($reader);
+	waitpid($pid, 0);
 	{
 		open(my $writer, "> $outputPrefix.abundance.txt");
 		if(%geneDefinitionHash) {
@@ -451,26 +576,6 @@ sub getGene {
 	return $_ if(defined($_ = $proteinGeneHash{$protein}));
 	return $1 if($protein =~ /^(K[0-9]{5})_/);
 	return $protein;
-}
-
-sub getBaseCountReadList {
-	my ($bamFile, $contig, $start, $end, $strand) = @_;
-	my $baseCount = 0;
-	my %readCountHash = ();
-	open(my $reader, "samtools view -F 2308 -q $minimumMappingQuality $bamFile $contig:$start-$end |");
-	while(my $line = <$reader>) {
-		chomp($line);
-		my %tokenHash = ();
-		@tokenHash{'qname', 'flag', 'rname', 'pos', 'mapq', 'cigar', 'rnext', 'pnext', 'tlen', 'seq', 'qual'} = split(/\t/, $line, -1);
-		next if($stranded ne '' && getReadStrand($tokenHash{'flag'}) ne $strand);
-		my @positionList = getPositionList(@tokenHash{'pos', 'cigar'});
-		if(@positionList = grep {$start <= $_ && $_ <= $end} grep {defined} @positionList) {
-			$baseCount += scalar(@positionList);
-			$readCountHash{$tokenHash{'qname'}} += 1;
-		}
-	}
-	close($reader);
-	return ($baseCount, keys %readCountHash);
 }
 
 sub getReadStrand {
