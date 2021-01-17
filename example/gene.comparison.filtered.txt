@@ -1,0 +1,3 @@
+gene	definition	group	log2foldchange	p.value	p.adjust
+K03707	tenA; thiaminase (transcriptional activator TenA) [EC:3.5.99.2]	response	1.292457	0.007038342	0.4327822
+K07783	uhpC; MFS transporter, OPA family, sugar phosphate sensor protein UhpC	response	1.251294	0.001172141	0.4327822
