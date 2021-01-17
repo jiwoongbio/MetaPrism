@@ -11,11 +11,12 @@ MetaPrism provides joint profile (infer both taxonomical and functional profile)
 3. Perl module Statistics::R - https://metacpan.org/pod/Statistics::R
 4. R library caret - https://cran.r-project.org/web/packages/caret/index.html
 5. R library randomForest - https://cran.r-project.org/web/packages/randomForest/index.html
-6. DIAMOND - https://github.com/bbuchfink/diamond or USEARCH - https://www.drive5.com/usearch/
+6. DIAMOND - https://github.com/bbuchfink/diamond (recommended) or USEARCH - https://www.drive5.com/usearch/
 7. BWA - http://bio-bwa.sourceforge.net
 8. Samtools - http://www.htslib.org
 9. Centrifuge - https://ccb.jhu.edu/software/centrifuge/
 10. Linux commands: sort, wget - https://www.gnu.org/software/wget/
+11. MEGAHIT - https://github.com/voutcn/megahit (optional) 
 
 
 ## Install
@@ -23,6 +24,89 @@ MetaPrism provides joint profile (infer both taxonomical and functional profile)
 If you already have Git (https://git-scm.com) installed, you can get the latest development version using Git. It will take a few seconds.
 ```
 git clone https://github.com/jiwoongbio/MetaPrism.git
+```
+
+
+## Tutorial
+
+The example commands based on the data of [https://www.ncbi.nlm.nih.gov/bioproject/PRJNA397906](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA397906) are available at [example/example.sh](example/example.sh).
+
+1. Prepare database files
+```
+perl MetaPrism_gene_prepare.pl
+```
+
+2. De novo metagenome assembly (per sample)
+```
+megahit -1 sample1.1.fastq.gz -2 sample1.2.fastq.gz -o sample1.megahit
+```
+
+3. Gene annotation and abundance quantification (per sample)
+```
+perl MetaPrism_gene.pl sample1.gene sample1.megahit/final.contigs.fa sample1.1.fastq.gz,sample1.2.fastq.gz
+```
+
+4. Taxon annotation (per sample)
+```
+perl MetaPrism_taxon_centrifuge.pl sample1.gene.region.abundance.txt sample1.megahit/final.contigs.fa centrifuge/data/p_compressed > sample1.gene_taxon.region.abundance.txt
+```
+
+5. Compare sample groups and identify differentially-abundant genes
+```
+perl MetaPrism_comparison.pl -F gene sample.group.txt \
+	sample1=sample1.gene_taxon.region.abundance.txt \
+	sample2=sample2.gene_taxon.region.abundance.txt \
+	sample3=sample3.gene_taxon.region.abundance.txt \
+	sample4=sample4.gene_taxon.region.abundance.txt \
+	sample5=sample5.gene_taxon.region.abundance.txt \
+	sample6=sample6.gene_taxon.region.abundance.txt \
+	> gene.comparison.txt
+
+awk -F'\t' '(NR == 1 || ($4 >= 1 && $5 <= 0.01))' gene.comparison.txt > gene.comparison.filtered.txt
+```
+
+* sample.group.txt is a text file containing lines of tab-delimited sample and group like following:
+| sample1 | group1 |
+| sample2 | group1 |
+| sample3 | group1 |
+| sample4 | group2 |
+| sample5 | group2 |
+| sample6 | group2 |
+
+6. Generate heatmap
+```
+perl ../MetaPrism_heatmap.pl -F gene -s -g gene.comparison.filtered.txt -r both \
+	sample1=sample1.gene_taxon.region.abundance.txt \
+	sample2=sample2.gene_taxon.region.abundance.txt \
+	sample3=sample3.gene_taxon.region.abundance.txt \
+	sample4=sample4.gene_taxon.region.abundance.txt \
+	sample5=sample5.gene_taxon.region.abundance.txt \
+	sample6=sample6.gene_taxon.region.abundance.txt \
+	> gene.heatmap.html
+```
+
+7. Generate table
+```
+perl ../MetaPrism_table.pl -F taxon_average -s \
+	sample1=sample1.gene_taxon.region.abundance.txt \
+	sample2=sample2.gene_taxon.region.abundance.txt \
+	sample3=sample3.gene_taxon.region.abundance.txt \
+	sample4=sample4.gene_taxon.region.abundance.txt \
+	sample5=sample5.gene_taxon.region.abundance.txt \
+	sample6=sample6.gene_taxon.region.abundance.txt \
+	> taxon.table.txt
+```
+
+8. Prediction model accuracy
+```
+perl ../MetaPrism_prediction.pl -t xgbTree -f prediction.feature.txt sample.group.txt \
+	sample1=sample1.gene_taxon.region.abundance.txt \
+	sample2=sample2.gene_taxon.region.abundance.txt \
+	sample3=sample3.gene_taxon.region.abundance.txt \
+	sample4=sample4.gene_taxon.region.abundance.txt \
+	sample5=sample5.gene_taxon.region.abundance.txt \
+	sample6=sample6.gene_taxon.region.abundance.txt \
+	> prediction.txt
 ```
 
 
