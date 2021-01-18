@@ -1,4 +1,4 @@
-Table of Contents
+# Table of Contents
 - [MetaPrism](#metaprism)
 - [Requirements](#requirements)
 - [Install](#install)
