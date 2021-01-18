@@ -99,8 +99,7 @@ awk -F'\t' '(NR == 1 || ($4 >= 1 && $5 <= 0.01))' gene.comparison.txt > gene.com
   sample6 group2
 ````
 
-Here `sample1`, `sample2`, and `sample3` are from `group1`, and the rest are from `group2`.
-For another example group file, see [example/sample.group.txt](example/sample.group.txt).
+Here `sample1`, `sample2`, and `sample3` are from `group1`, and the rest are from `group2`. For another example group file, see [example/sample.group.txt](example/sample.group.txt).
 
 6. Generate a heatmap webpage
 
