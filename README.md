@@ -1,3 +1,5 @@
+<!-- TOC -->autoauto- [MetaPrism](#metaprism)auto    - [Requirements](#requirements)auto    - [Install](#install)auto    - [Tutorial](#tutorial)auto    - [Usages](#usages)auto    - [Citation](#citation)autoauto<!-- /TOC -->
+
 # MetaPrism
 MetaPrism: A Toolkit for Joint Analysis of Meta-genomic Sequencing Data 
 
