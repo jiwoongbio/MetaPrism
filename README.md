@@ -37,34 +37,44 @@ git clone https://github.com/jiwoongbio/MetaPrism.git
 
 ## Tutorial
 
-We present a short tutorial to help users quickly get started on their own analysis. The datasets are based on [https://www.ncbi.nlm.nih.gov/bioproject/PRJNA397906](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA397906) and the full command list is  available at [example/example.sh](example/example.sh).
+We present a short tutorial to help users quickly get started on their own analysis. The example datasets are based on [https://www.ncbi.nlm.nih.gov/bioproject/PRJNA397906](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA397906) and the full command list is  available at [example/example.sh](example/example.sh).
 
 1. Prepare database files
+
 This step will download necessary databases for MetaPrism in your current directory.
+
 ```
 perl MetaPrism_gene_prepare.pl
 ```
 
 2. De novo metagenome assembly (per sample)
+
 For each sample, users need to perform de novo assembly. Suppose the input paired end sequence files are `sample1.1.fastq.gz` and `sample1.2.fastq.gz`. The commnad line is:
+
 ```
 megahit -1 sample1.1.fastq.gz -2 sample1.2.fastq.gz -o sample1.megahit
 ```
 
 3. Gene annotation and abundance quantification (per sample)
+
 For each sample, MetaPrism first quantify all gene abundances. The file `sample1.megahit/final.contigs.fa` is the output from the previous step.
+
 ```
 perl MetaPrism_gene.pl sample1.gene sample1.megahit/final.contigs.fa sample1.1.fastq.gz,sample1.2.fastq.gz
 ```
 
 4. Taxon annotation (per sample)
+
 MetaPrism will next infer the taxonomy for each contig. The file `sample1.gene.region.abundance.txt` is the output from the previous step. The result will be outputted to the console. We redirected it to the result file `sample1.gene_taxon.region.abundance.txt`.
+
 ```
 perl MetaPrism_taxon_centrifuge.pl sample1.gene.region.abundance.txt sample1.megahit/final.contigs.fa centrifuge/data/p_compressed > sample1.gene_taxon.region.abundance.txt
 ```
 
 5. Compare sample groups and identify differentially-abundant genes
+
 Suppose that you repeat step 2 to step 4, and you get a list of joint features (`sample1.gene_taxon.region.abundance.txt`, `sample2.gene_taxon.region.abundance.txt`, ..., `sample6.gene_taxon.region.abundance.txt`). MetaPrism can perform comparative analysis using the following command:
+
 ```
 perl MetaPrism_comparison.pl -F gene sample.group.txt \
 	sample1=sample1.gene_taxon.region.abundance.txt \
@@ -93,7 +103,9 @@ Here `sample1`, `sample2`, and `sample3` are from `group1`, and the rest are fro
 For another example group file, see [example/sample.group.txt](example/sample.group.txt).
 
 6. Generate a heatmap webpage
+
 You can also generate a heatmap webpage using the `MetaPrism_heatmap.pl` command.
+
 ```
 perl MetaPrism_heatmap.pl -F gene -s -g gene.comparison.filtered.txt -r both \
 	sample1=sample1.gene_taxon.region.abundance.txt \
@@ -106,7 +118,9 @@ perl MetaPrism_heatmap.pl -F gene -s -g gene.comparison.filtered.txt -r both \
 ```
 
 7. Generate a tabular result file
+
 Users may also want to have a tabular file for their own analysis. This command will produce such tabular text file: 
+
 ```
 perl MetaPrism_table.pl -F taxon_average -s \
 	sample1=sample1.gene_taxon.region.abundance.txt \
@@ -119,7 +133,9 @@ perl MetaPrism_table.pl -F taxon_average -s \
 ```
 
 8. Build a prediction model
+
 Users can build a prediction model using `MetaPrism_prediction.pl`. The option `-t xgbTree` uses the xgboost algorithm with leave-one-out cross validation. The result file `prediction.feature.txt` lists the feature importances, and the file `prediction.txt` lists the prediction accuracies.
+
 ```
 perl MetaPrism_prediction.pl -t xgbTree -f prediction.feature.txt sample.group.txt \
 	sample1=sample1.gene_taxon.region.abundance.txt \
