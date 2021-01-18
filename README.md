@@ -72,12 +72,17 @@ awk -F'\t' '(NR == 1 || ($4 >= 1 && $5 <= 0.01))' gene.comparison.txt > gene.com
 
 * sample.group.txt is a text file containing lines of tab-delimited sample and group like following:
 
-| sample1 | group1 |
-| sample2 | group1 |
-| sample3 | group1 |
-| sample4 | group2 |
-| sample5 | group2 |
-| sample6 | group2 |
+````
+  sample1 group1
+  sample2 group1
+  sample3 group1
+  sample4 group2
+  sample5 group2
+  sample6 group2
+````
+
+Here `sample1`, `sample2`, and `sample3` are from `group1`, and the rest are from `group2`.
+For another example group file, see [example/sample.group.txt] (example/sample.group.txt).
 
 6. Generate a heatmap webpage
 You can also generate a heatmap webpage using the `MetaPrism_heatmap.pl` command.
