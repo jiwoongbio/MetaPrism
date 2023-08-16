@@ -147,7 +147,7 @@ if($databaseOrthology) {
 		}
 	}
 	{
-		my $URL = "ftp://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref$unirefIdentity/uniref$unirefIdentity.fasta.gz";
+		my $URL = "https://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref$unirefIdentity/uniref$unirefIdentity.fasta.gz";
 		my $file = "$dataPath/uniref$unirefIdentity.fasta.gz";
 		system("wget --no-verbose --no-check-certificate -O $file $URL") if(not -r $file or $redownload);
 		open(my $reader, "gzip -dc $file |");
