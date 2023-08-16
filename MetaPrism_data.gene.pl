@@ -58,7 +58,7 @@ if($databaseOrthology) {
 		if(not -r "$dataPath/nodes.dmp" or not -r "$dataPath/names.dmp" or $redownload) {
 			my $URL = "ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz";
 			my $file = "$dataPath/taxdump.tar.gz";
-			system("wget --no-verbose -O $file $URL") if(not -r $file or $redownload);
+			system("wget --no-verbose --no-check-certificate -O $file $URL") if(not -r $file or $redownload);
 			system("cd $dataPath; tar -zxf taxdump.tar.gz nodes.dmp");
 			system("cd $dataPath; tar -zxf taxdump.tar.gz names.dmp");
 			system("rm -f $dataPath/$_") foreach('nodes', 'parents', 'names2id', 'id2names');
@@ -81,9 +81,9 @@ if($databaseOrthology) {
 	my $pid = open2(my $reader, my $writer, "sort -t '\t' -k1,1 -k2 | uniq | cut -f2-");
 	open(my $writerLog, "> $dataPath/$database.log");
 	{
-		my $URL = 'ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/idmapping.dat.gz';
+		my $URL = 'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/idmapping.dat.gz';
 		my $file = "$dataPath/idmapping.dat.gz";
-		system("wget --no-verbose -O $file $URL") if(not -r $file or $redownload);
+		system("wget --no-verbose --no-check-certificate -O $file $URL") if(not -r $file or $redownload);
 		my %tokenHash = ('UniProtKB-AC' => '');
 		open(my $reader, "gzip -dc $file | sort -t '\t' -k1,1 |");
 		while(my $line = <$reader>) {
@@ -126,7 +126,7 @@ if($databaseOrthology) {
 
 		sub addUnirefOrthology {
 			my %geneOrthologyHash = ();
-			open(my $reader, "wget --no-verbose -O - http://rest.kegg.jp/link/ko/$orgCode |");
+			open(my $reader, "wget --no-verbose --no-check-certificate -O - http://rest.kegg.jp/link/ko/$orgCode |");
 			while(my $line = <$reader>) {
 				chomp($line);
 				my ($gene, $orthology) = split(/\t/, $line, -1);
@@ -149,7 +149,7 @@ if($databaseOrthology) {
 	{
 		my $URL = "ftp://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref$unirefIdentity/uniref$unirefIdentity.fasta.gz";
 		my $file = "$dataPath/uniref$unirefIdentity.fasta.gz";
-		system("wget --no-verbose -O $file $URL") if(not -r $file or $redownload);
+		system("wget --no-verbose --no-check-certificate -O $file $URL") if(not -r $file or $redownload);
 		open(my $reader, "gzip -dc $file |");
 		open(my $writer, "> $dataPath/$database.fasta");
 		my $printSequence = '';
@@ -177,7 +177,7 @@ if($databaseOrthology) {
 	waitpid($pid, 0);
 	close($writerLog);
 	{
-		open(my $reader, 'wget --no-verbose -O - http://rest.kegg.jp/list/ko |');
+		open(my $reader, 'wget --no-verbose --no-check-certificate -O - http://rest.kegg.jp/list/ko |');
 		open(my $writer, "> $dataPath/$database.definition.txt");
 		while(my $line = <$reader>) {
 			chomp($line);
@@ -197,7 +197,7 @@ if($databaseOrthology) {
 	$database = 'AMR';
 	my %geneDefinitionCountHash = ();
 	{
-		open(my $reader, "wget --no-verbose -O - ftp://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/Data/latest/ReferenceGeneCatalog.txt |");
+		open(my $reader, "wget --no-verbose --no-check-certificate -O - ftp://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/Data/latest/ReferenceGeneCatalog.txt |");
 		open(my $writer, "| sort -t '\t' -k1,1 -k2,2 | uniq > $dataPath/$database.txt");
 		chomp(my $line = <$reader>);
 		my @columnList = split(/\t/, $line, -1);
@@ -268,10 +268,10 @@ sub efetch {
 	my $output = '';
 	while($output eq '') {
 		if(defined($apiKey)) {
-			$output = `wget --no-verbose -O - '$baseURL/efetch.fcgi?db=$db&id=$id&rettype=$rettype&retmode=$retmode&api_key=$apiKey'`;
+			$output = `wget --no-verbose --no-check-certificate -O - '$baseURL/efetch.fcgi?db=$db&id=$id&rettype=$rettype&retmode=$retmode&api_key=$apiKey'`;
 			Time::HiRes::usleep(105);
 		} else {
-			$output = `wget --no-verbose -O - '$baseURL/efetch.fcgi?db=$db&id=$id&rettype=$rettype&retmode=$retmode'`;
+			$output = `wget --no-verbose --no-check-certificate -O - '$baseURL/efetch.fcgi?db=$db&id=$id&rettype=$rettype&retmode=$retmode'`;
 			Time::HiRes::usleep(350);
 		}
 	}
@@ -289,15 +289,15 @@ sub esearch {
 		my $xmlString = '';
 		unless(defined($web) && defined($key)) {
 			if(defined($apiKey)) {
-				$xmlString = `wget --no-verbose -O - '$baseURL/esearch.fcgi?db=$db&term=$encodedTerm&usehistory=y&retmax=$retmax&retstart=$retstart&mindate=$mindate&maxdate=$maxdate&api_key=$apiKey'`;
+				$xmlString = `wget --no-verbose --no-check-certificate -O - '$baseURL/esearch.fcgi?db=$db&term=$encodedTerm&usehistory=y&retmax=$retmax&retstart=$retstart&mindate=$mindate&maxdate=$maxdate&api_key=$apiKey'`;
 			} else {
-				$xmlString = `wget --no-verbose -O - '$baseURL/esearch.fcgi?db=$db&term=$encodedTerm&usehistory=y&retmax=$retmax&retstart=$retstart&mindate=$mindate&maxdate=$maxdate'`;
+				$xmlString = `wget --no-verbose --no-check-certificate -O - '$baseURL/esearch.fcgi?db=$db&term=$encodedTerm&usehistory=y&retmax=$retmax&retstart=$retstart&mindate=$mindate&maxdate=$maxdate'`;
 			}
 		} else {
 			if(defined($apiKey)) {
-				$xmlString = `wget --no-verbose -O - '$baseURL/esearch.fcgi?WebEnv=$web&query_key=$key&retmax=$retmax&retstart=$retstart&api_key=$apiKey'`;
+				$xmlString = `wget --no-verbose --no-check-certificate -O - '$baseURL/esearch.fcgi?WebEnv=$web&query_key=$key&retmax=$retmax&retstart=$retstart&api_key=$apiKey'`;
 			} else {
-				$xmlString = `wget --no-verbose -O - '$baseURL/esearch.fcgi?WebEnv=$web&query_key=$key&retmax=$retmax&retstart=$retstart'`;
+				$xmlString = `wget --no-verbose --no-check-certificate -O - '$baseURL/esearch.fcgi?WebEnv=$web&query_key=$key&retmax=$retmax&retstart=$retstart'`;
 			}
 		}
 		if($xmlString =~ /<\/eSearchResult>\n?$/) {
