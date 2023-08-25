@@ -16,7 +16,10 @@ use Getopt::Long qw(:config no_ignore_case);
 my $dataPath = "$codePath/data";
 system("mkdir -p $dataPath");
 
-my $dataURL = 'https://qbrc.swmed.edu/FMAP/FMAP_data';
+my @dataURLList = (
+	'https://cdc.biohpc.swmed.edu/FMAP/FMAP_data',
+	'https://qbrc.swmed.edu/FMAP/FMAP_data',
+);
 
 # NCBI E-utility
 my $baseURL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
@@ -259,7 +262,9 @@ sub getTimeString {
 
 sub downloadDataFile {
 	foreach my $file (@_) {
-		system("wget --no-verbose --no-check-certificate -O $dataPath/$file $dataURL/$file") if(not -r "$dataPath/$file" or $redownload);
+		foreach my $dataURL (@dataURLList) {
+			system("wget --no-verbose --no-check-certificate -O $dataPath/$file $dataURL/$file") if(not -r "$dataPath/$file" or $redownload);
+		}
 	}
 }
 
