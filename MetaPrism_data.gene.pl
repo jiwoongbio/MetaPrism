@@ -264,6 +264,7 @@ sub downloadDataFile {
 	foreach my $file (@_) {
 		foreach my $dataURL (@dataURLList) {
 			system("wget --no-verbose --no-check-certificate -O $dataPath/$file $dataURL/$file") if(not -r "$dataPath/$file" or $redownload);
+			system("rm $dataPath/$file") if(-z "$dataPath/$file");
 		}
 	}
 }
