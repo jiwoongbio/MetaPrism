@@ -408,6 +408,8 @@ my %chromosomeHash = ();
 			$tokenHash->{'protein'} = $tokenHash->{'rname'};
 			if($tokenHash->{'protein'} =~ s/^(K[0-9]{5})_//) {
 				$tokenHash->{'gene'} = $1;
+			} elsif($tokenHash->{'protein'} =~ s/=>(.*)$//) {
+				$tokenHash->{'gene'} = $1;
 			} elsif(defined(my $gene = $proteinGeneHash{$tokenHash->{'protein'}})) {
 				$tokenHash->{'gene'} = $gene;
 			} else {
