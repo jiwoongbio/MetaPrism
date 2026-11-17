@@ -184,7 +184,7 @@ fork_print_parent_writer($writer);
 my @column_list = ();
 my $gene_index;
 {
-	open(my $reader, '<', $metaPrismFile) or die "Can't open '$metaPrismFile': $!";
+	open(my $reader, ($metaPrismFile =~ /\.gz$/ ? "gzip -dc $metaPrismFile |" : $metaPrismFile)) or die "Can't open '$metaPrismFile': $!";
 	chomp(my $line = <$reader>);
 	$line =~ s/\r$//;
 	@column_list = split(/\t/, $line, -1);
